@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Shipments{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Shipments</h2>
+    <div class="text-muted">Inbound shipments created from purchase orders.</div>
+  </div>
+</div>
+
+<div class="card card-soft p-3">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Shipment</th>
+          <th>PO</th>
+          <th>Supplier</th>
+          <th>Destination</th>
+          <th>Status</th>
+          <th>ETA</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in shipments %}
+        <tr>
+          <td class="fw-semibold">#{{ s.id }}</td>
+          <td><a href="/po/{{ s.po.id }}/">{{ s.po.po_number }}</a></td>
+          <td>{{ s.from_supplier.name }}</td>
+          <td>{{ s.destination.name }}</td>
+          <td><span class="pill">{{ s.status }}</span></td>
+          <td>{{ s.eta|default:"—" }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/shipments/{{ s.id }}/">Open</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">No shipments yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

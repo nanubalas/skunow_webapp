@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Reconciliation (Shopify snapshot vs SKUNOW)</h2>
+<table class="table table-hover bg-white">
+  <tr><th>SKU</th><th>SKUNOW Qty</th><th>Shopify Qty</th><th>Drift (Shopify - SKUNOW)</th></tr>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.sku }}</td>
+      <td>{{ r.skunow_qty }}</td>
+      <td>{{ r.channel_qty }}</td>
+      <td>{{ r.drift }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4">No snapshots yet. Run sync_shopify.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

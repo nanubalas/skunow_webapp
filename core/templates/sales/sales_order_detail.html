@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}Sales Order {{ order.order_number }} — SKUNOW{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Sales Order {{ order.order_number }}</h2>
+    <div class="text-muted">
+      Channel: <span class="badge text-bg-light">{{ order.channel }}</span>
+      <span class="mx-2">•</span>
+      Status:
+      {% if order.status == "POSTED" %}
+        <span class="badge text-bg-success">Posted</span>
+      {% else %}
+        <span class="badge text-bg-secondary">{{ order.status }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/sales-orders/">Back</a>
+    {% if order.status != "POSTED" %}
+      <a class="btn btn-success" href="/sales-orders/{{ order.id }}/post/">Post</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h5 class="fw-semibold mb-3">Details</h5>
+        <div class="mb-2"><span class="text-muted">Order date:</span> <b>{{ order.order_date|date:"d M Y" }}</b></div>
+        <div class="mb-2"><span class="text-muted">Ship from:</span> <b>{{ order.ship_from_location.name }}</b></div>
+        <div class="mb-2"><span class="text-muted">Currency:</span> <b>{{ order.currency_code }}</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card card-soft">
+      <div class="card-body">
+        <h5 class="fw-semibold mb-3">Line Items</h5>
+
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>SKU</th>
+                <th>Description</th>
+                <th>Ship From</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Unit Price</th>
+                <th class="text-end">Line Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in order.lines.all %}
+              <tr>
+                <td class="fw-semibold">{{ l.product.sku }}{% if l.lot_code or l.serial_number or l.expiry_date %}<div class="text-muted small">{% if l.lot_code %}Lot: {{ l.lot_code }}{% endif %}{% if l.serial_number %} • Serial: {{ l.serial_number }}{% endif %}{% if l.expiry_date %} • Exp: {{ l.expiry_date }}{% endif %}</div>{% endif %}</td>
+                <td>{{ l.product.name }}</td>
+                <td>{{ l.ship_from_location.name|default:order.ship_from_location.name }}</td>
+                <td class="text-end">{{ l.qty|floatformat:2 }}</td>
+                <td class="text-end">{{ l.unit_price|money:order.currency_code }}</td>
+                <td class="text-end">{{ l.line_total|money:order.currency_code }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="d-flex justify-content-end mt-3">
+          <div style="min-width: 280px;">
+            <div class="d-flex justify-content-between">
+              <div class="text-muted">Subtotal</div>
+              <div class="fw-semibold">{{ subtotal|money:order.currency_code }}</div>
+            </div>
+            <hr class="my-2"/>
+            <div class="d-flex justify-content-between">
+              <div class="fw-bold">Total</div>
+              <div class="fw-bold">{{ subtotal|money:order.currency_code }}</div>
+            </div>
+          </div>
+        </div>
+
+        {% if order.status != "POSTED" %}
+          <div class="alert alert-warning mt-4 mb-0">
+            Posting will deduct inventory from <b>{{ order.ship_from_location.name }}</b>.
+            Add stock checks next if you want to prevent overselling.
+          </div>
+        {% else %}
+          <div class="alert alert-success mt-4 mb-0">
+            Order posted. Inventory was deducted via movement ledger.
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

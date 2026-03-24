@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Create BOM — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Create BOM</h2>
+    <div class="text-muted">Create a BOM header, then add components.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/boms/">Back</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body p-4">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Assembled / bundle SKU</label>
+          {{ form.product }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Name</label>
+          {{ form.name }}
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Active</label>
+          {{ form.is_active }}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="/boms/">Cancel</a>
+        <button class="btn btn-primary" type="submit">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("input, select, textarea").forEach(el => el.classList.add("form-control"));
+</script>
+{% endblock %}

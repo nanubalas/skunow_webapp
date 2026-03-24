@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Delete Supplier — SKUNOW{% endblock %}
+
+{% block body %}
+<div class="card card-soft">
+  <div class="card-body p-4">
+    <h3 class="fw-bold">Delete Supplier</h3>
+    <p class="text-muted mb-4">
+      Are you sure you want to delete <b>{{ supplier.name }}</b>? This cannot be undone.
+      If this supplier is linked to existing POs, deletion may be blocked.
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="/suppliers/">Cancel</a>
+        <button class="btn btn-danger" type="submit">Delete</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

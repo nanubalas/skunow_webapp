@@ -1,0 +1,73 @@
+
+{% extends "base.html" %}
+{% block title %}Cycle Count #{{ cc.id }} — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Cycle Count #{{ cc.id }}</h2>
+    <div class="text-muted">
+      Location: <b>{{ cc.location.name }}</b>
+      <span class="mx-2">•</span>
+      Status: <span class="badge text-bg-light">{{ cc.status }}</span>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/cycle-counts/">Back</a>
+
+    {% if cc.status == "DRAFT" %}
+      <form method="post" action="/cycle-counts/{{ cc.id }}/submit/">{% csrf_token %}
+        <button class="btn btn-primary" type="submit">Submit</button>
+      </form>
+    {% endif %}
+
+    {% if cc.status == "SUBMITTED" %}
+      <form method="post" action="/cycle-counts/{{ cc.id }}/approve/">{% csrf_token %}
+        <button class="btn btn-success" type="submit">Approve</button>
+      </form>
+    {% endif %}
+
+    {% if cc.status == "APPROVED" %}
+      <a class="btn btn-success" href="/cycle-counts/{{ cc.id }}/post/">Post</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Lot</th>
+            <th>Serial</th>
+            <th>Expiry</th>
+            <th class="text-end">System</th>
+            <th class="text-end">Counted</th>
+            <th class="text-end">Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in cc.lines.all %}
+          <tr>
+            <td class="fw-semibold">{{ l.product.sku }}</td>
+            <td>{{ l.product.name }}</td>
+            <td>{% if l.lot_code %}{{ l.lot_code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if l.serial_number %}{{ l.serial_number }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if l.expiry_date %}{{ l.expiry_date|date:"d M Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end">{{ l.system_qty|floatformat:2 }}</td>
+            <td class="text-end">{{ l.counted_qty|floatformat:2 }}</td>
+            <td class="text-end {% if l.variance_qty < 0 %}text-danger{% elif l.variance_qty > 0 %}text-success{% endif %}">
+              {{ l.variance_qty|floatformat:2 }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted py-5">No lines.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

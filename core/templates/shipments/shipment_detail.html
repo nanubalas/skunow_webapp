@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Shipment #{{ shipment.id }}{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Shipment #{{ shipment.id }}</h2>
+    <div class="text-muted">PO: <a href="/po/{{ po.id }}/">{{ po.po_number }}</a> • Supplier: <b>{{ shipment.from_supplier.name }}</b></div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/po/{{ po.id }}/">Back to PO</a>
+    <a class="btn btn-outline-success" href="/po/{{ po.id }}/receive/?shipment_id={{ shipment.id }}">Receive</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card card-soft p-4">
+      <h5 class="fw-semibold mb-3">Shipment Details</h5>
+      <form method="post">{% csrf_token %}
+        <input type="hidden" name="action" value="update_shipment">
+        {{ form.as_p }}
+        <button class="btn btn-primary" type="submit">Save</button>
+      </form>
+      <hr class="my-4">
+      <h6 class="fw-semibold">Create another shipment for this PO</h6>
+      <a class="btn btn-outline-primary" href="/po/{{ po.id }}/shipments/new/">New Shipment</a>
+    </div>
+
+    <div class="card card-soft p-4 mt-4">
+      <h5 class="fw-semibold mb-3">Containers</h5>
+      <form method="post" class="row g-2">{% csrf_token %}
+        <input type="hidden" name="action" value="add_container">
+        <div class="col-6"><input class="form-control" name="container_number" placeholder="Container #" required></div>
+        <div class="col-6"><input class="form-control" name="seal_number" placeholder="Seal #"></div>
+        <div class="col-6"><input class="form-control" name="mode" placeholder="Mode (sea/air/road)"></div>
+        <div class="col-12"><button class="btn btn-outline-secondary" type="submit">Add Container</button></div>
+      </form>
+
+      <ul class="mt-3 mb-0">
+        {% for c in containers %}
+          <li><b>{{ c.container_number }}</b>{% if c.seal_number %} • Seal {{ c.seal_number }}{% endif %}{% if c.mode %} • {{ c.mode }}{% endif %}</li>
+        {% empty %}
+          <li class="text-muted">No containers yet.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card card-soft p-4">
+      <h5 class="fw-semibold mb-3">Allocation (Expected Qty)</h5>
+      <form method="post">{% csrf_token %}
+        <input type="hidden" name="action" value="allocate">
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th class="text-end">PO Open</th>
+                <th class="text-end">Expected</th>
+                <th class="text-end">Received</th>
+                <th class="text-end">Open</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for sl in lines %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">{{ sl.po_line.product.sku }}</div>
+                  <div class="text-muted small">{{ sl.po_line.product.name }}</div>
+                </td>
+                <td class="text-end">{{ sl.po_line.open_qty|floatformat:2 }}</td>
+                <td class="text-end" style="width:140px">
+                  <input class="form-control form-control-sm text-end" name="exp_{{ sl.id }}" value="{{ sl.expected_qty|floatformat:2 }}">
+                </td>
+                <td class="text-end">{{ sl.received_qty|floatformat:2 }}</td>
+                <td class="text-end">{{ sl.open_qty|floatformat:2 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button class="btn btn-outline-primary" type="submit">Save Allocation</button>
+      </form>
+    </div>
+
+    <div class="card card-soft p-4 mt-4">
+      <h5 class="fw-semibold mb-3">Timeline</h5>
+      <form method="post" class="row g-2 mb-3">{% csrf_token %}
+        <input type="hidden" name="action" value="add_event">
+        <div class="col-md-4">
+          <input class="form-control" name="event_type" placeholder="Event type (Departed, Customs, Delivered)" required>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" name="container_id">
+            <option value="">All shipment</option>
+            {% for c in containers %}
+              <option value="{{ c.id }}">{{ c.container_number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2"><input class="form-control" name="status" placeholder="Status"></div>
+        <div class="col-md-3"><input class="form-control" name="notes" placeholder="Notes"></div>
+        <div class="col-12"><button class="btn btn-outline-secondary" type="submit">Add Event</button></div>
+      </form>
+
+      <div class="list-group">
+        {% for e in events %}
+          <div class="list-group-item">
+            <div class="d-flex justify-content-between">
+              <div class="fw-semibold">{{ e.event_type }}{% if e.container %} • {{ e.container.container_number }}{% endif %}</div>
+              <div class="text-muted small">{{ e.occurred_at }}</div>
+            </div>
+            {% if e.status %}<div class="text-muted small">Status: {{ e.status }}</div>{% endif %}
+            {% if e.notes %}<div>{{ e.notes }}</div>{% endif %}
+          </div>
+        {% empty %}
+          <div class="text-muted">No events yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

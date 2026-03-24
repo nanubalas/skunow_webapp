@@ -1,0 +1,130 @@
+
+{% extends "base.html" %}
+{% block title %}New Cycle Count — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">New Cycle Count</h2>
+    <div class="text-muted">Enter counted quantities (lot/serial optional).</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/cycle-counts/">Back</a>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card card-soft">
+        <div class="card-body">
+          <h5 class="fw-semibold mb-3">Header</h5>
+          <div class="mb-3">
+            <label class="form-label">Location</label>
+            {{ form.location }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Count date</label>
+            {{ form.count_date }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            {{ form.notes }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card card-soft">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-semibold mb-0">Lines</h5>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-line-btn">+ Add line</button>
+          </div>
+
+          {{ formset.management_form }}
+
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:35%">Product</th>
+                  <th style="width:15%">Lot</th>
+                  <th style="width:15%">Serial</th>
+                  <th style="width:15%">Expiry</th>
+                  <th class="text-end" style="width:12%">Counted Qty</th>
+                  <th class="text-center" style="width:8%">Remove</th>
+                </tr>
+              </thead>
+              <tbody id="lines-body">
+                {% for f in formset %}
+                <tr class="line-row">
+                  <td>{{ f.product }}</td>
+                  <td>{{ f.lot_code }}</td>
+                  <td>{{ f.serial_number }}</td>
+                  <td>{{ f.expiry_date }}</td>
+                  <td class="text-end">{{ f.counted_qty }}</td>
+                  <td class="text-center">
+                    <div class="form-check d-inline-block">{{ f.DELETE }}</div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <template id="empty-form-template">
+            <tr class="line-row">
+              <td>{{ formset.empty_form.product }}</td>
+              <td>{{ formset.empty_form.lot_code }}</td>
+              <td>{{ formset.empty_form.serial_number }}</td>
+              <td>{{ formset.empty_form.expiry_date }}</td>
+              <td class="text-end">{{ formset.empty_form.counted_qty }}</td>
+              <td class="text-center">
+                <div class="form-check d-inline-block">{{ formset.empty_form.DELETE }}</div>
+              </td>
+            </tr>
+          </template>
+
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <a class="btn btn-outline-secondary" href="/cycle-counts/">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Draft</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+  document.querySelectorAll("select, input, textarea").forEach(el => {
+    if (el.type === "checkbox") el.classList.add("form-check-input");
+    else el.classList.add("form-control");
+  });
+
+  const addBtn = document.getElementById("add-line-btn");
+  const tbody = document.getElementById("lines-body");
+  const template = document.getElementById("empty-form-template");
+
+  function updateAttributes(html, index) {
+    return html.replaceAll("__prefix__", index);
+  }
+
+  addBtn.addEventListener("click", () => {
+    const totalFormsInput = document.querySelector('input[name="{{ formset.prefix }}-TOTAL_FORMS"]');
+    const index = parseInt(totalFormsInput.value, 10);
+
+    const tempHtml = updateAttributes(template.innerHTML, index);
+    const wrapper = document.createElement("tbody");
+    wrapper.innerHTML = tempHtml.trim();
+    const newRow = wrapper.querySelector("tr");
+
+    tbody.appendChild(newRow);
+    totalFormsInput.value = index + 1;
+
+    newRow.querySelectorAll("select, input, textarea").forEach(el => {
+      if (el.type === "checkbox") el.classList.add("form-check-input");
+      else el.classList.add("form-control");
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "create" %}Create Supplier{% else %}Edit Supplier{% endif %} — SKUNOW{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">
+      {% if mode == "create" %}Create Supplier{% else %}Edit Supplier{% endif %}
+    </h2>
+    <div class="text-muted">Supplier details used for PO documents and communication.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/suppliers/">Back</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body p-4">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Name</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email</label>
+          {{ form.email }}
+          {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Phone</label>
+          {{ form.phone }}
+          {% if form.phone.errors %}<div class="text-danger small">{{ form.phone.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="/suppliers/">Cancel</a>
+        <button class="btn btn-primary" type="submit">
+          {% if mode == "create" %}Create{% else %}Save changes{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("input, select, textarea").forEach(el => el.classList.add("form-control"));
+</script>
+{% endblock %}

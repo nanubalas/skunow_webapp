@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}Purchase Order {{ po.po_number }}{% endblock %}
+
+{% block body %}
+
+<div class="d-flex gap-2 flex-wrap mb-3">
+  {% if po.status == "DRAFT" %}
+    <form method="post" action="/po/{{ po.id }}/submit/">{% csrf_token %}
+      <button class="btn btn-primary" type="submit">Submit PO</button>
+    </form>
+  {% endif %}
+  {% if po.approval_required or po.status == "APPROVAL_PENDING" %}
+    <span class="badge text-bg-warning align-self-center">Approval required</span>
+    <form method="post" action="/po/{{ po.id }}/approve/">{% csrf_token %}
+      <button class="btn btn-outline-warning" type="submit">Approve</button>
+    </form>
+  {% endif %}
+  {% if po.status != "DRAFT" %}
+    <form method="post" action="/po/{{ po.id }}/send/">{% csrf_token %}
+      <button class="btn btn-outline-primary" type="submit">Send PO (Email)</button>
+    </form>
+    <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#amendModal">Amend</button>
+    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">Cancel</button>
+  {% endif %}
+  {% if po.shipments.exists %}
+    <a class="btn btn-outline-secondary" href="/shipments/?po={{ po.id }}">Shipments</a>
+    <a class="btn btn-outline-success" href="/po/{{ po.id }}/receive/?shipment_id={{ po.shipments.first.id }}">Receive</a>
+  {% endif %}
+  <a class="btn btn-outline-secondary" href="/po/{{ po.id }}/print/">Print</a>
+</div>
+
+<!-- Amend Modal -->
+<div class="modal fade" id="amendModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="/po/{{ po.id }}/amend/">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Amend PO</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label">Reason</label>
+          <input class="form-control" name="reason" required placeholder="Reason for amendment">
+          <div class="form-text">Creates a new Draft version you can edit and re-submit.</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button>
+          <button class="btn btn-primary" type="submit">Create Amendment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="/po/{{ po.id }}/cancel/">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Cancel PO</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label">Reason</label>
+          <input class="form-control" name="reason" placeholder="Why are you cancelling?">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button>
+          <button class="btn btn-danger" type="submit">Cancel PO</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<div class="card shadow-sm border-0 p-5 bg-white">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">PURCHASE ORDER</h2>
+      <div class="text-muted">PO Number: <strong>{{ po.po_number }}</strong></div>
+      <div class="text-muted">Issue Date: {{ po.created_at|date:"d M Y" }}</div>
+      <div class="text-muted">Expected Delivery: {{ po.expected_date|date:"d M Y" }}</div>
+    </div>
+
+    <div class="text-end">
+      <h4 class="fw-bold mb-1">{{ tenant.name }}</h4>
+
+      {% if tenant.address_line1 %}
+        <div class="text-muted">{{ tenant.address_line1 }}</div>
+      {% endif %}
+
+      {% if tenant.address_line2 %}
+        <div class="text-muted">{{ tenant.address_line2 }}</div>
+      {% endif %}
+
+      {% if tenant.email %}
+        <div class="text-muted">Email: {{ tenant.email }}</div>
+      {% endif %}
+
+      {% if tenant.vat_number %}
+        <div class="text-muted">VAT No: {{ tenant.vat_number }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <hr class="my-4">
+
+  <!-- Supplier + Delivery -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <h6 class="fw-semibold">Supplier</h6>
+      <div>{{ po.supplier.name }}</div>
+      <div>{{ po.supplier.email }}</div>
+      <div>{{ po.supplier.phone }}</div>
+    </div>
+
+    <div class="col-md-6 text-md-end">
+      <h6 class="fw-semibold">Delivery Address</h6>
+      <div>Main Warehouse</div>
+      <div>Warehouse Address Line 1</div>
+      <div>Warehouse Address Line 2</div>
+    </div>
+  </div>
+
+  <!-- Line Items -->
+  <table class="table table-bordered align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>SKU</th>
+        <th>Description</th>
+        <th class="text-end">Quantity</th>
+        <th class="text-end">Unit Price (£)</th>
+        <th class="text-end">Line Total (£)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in po.lines.all %}
+      <tr>
+        <td>{{ line.product.sku }}</td>
+        <td>{{ line.product.name }}</td>
+        <td class="text-end">{{ line.ordered_qty|floatformat:2 }}</td>
+        <td class="text-end">{{ line.unit_cost|floatformat:2 }}</td>
+        <td class="text-end">{{ line.line_total|money:tenant.currency_code }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Totals Section -->
+  <div class="row mt-4">
+    <div class="col-md-6">
+      <div><strong>Notes:</strong></div>
+      <div class="text-muted">{{ po.notes }}</div>
+
+      <div class="mt-4">
+        <strong>Payment Terms:</strong> Net 30 days<br>
+        <strong>Delivery Terms:</strong> Delivered Duty Paid (DDP)
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <table class="table table-borderless">
+        <tr>
+          <td class="text-end">Subtotal:</td>
+          <td class="text-end">£{{ subtotal|floatformat:2 }}</td>
+        </tr>
+        <tr>
+          <td class="text-end">VAT ({{ vat_rate_percent }}%):</td>
+          <td class="text-end">£{{ vat_amount|floatformat:2 }}</td>
+        </tr>
+        <tr class="border-top">
+          <td class="text-end fw-bold fs-5">Total:</td>
+          <td class="text-end fw-bold fs-5">£{{ total|floatformat:2 }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <hr class="my-4">
+
+  <!-- Signature Section -->
+  <div class="row mt-5">
+    <div class="col-md-6">
+      <div class="border-top pt-2 text-muted">
+        Authorized By
+      </div>
+    </div>
+    <div class="col-md-6 text-md-end">
+      <div class="border-top pt-2 text-muted">
+        Supplier Confirmation
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="mt-4 d-flex flex-wrap gap-2">
+  <a class="btn btn-outline-secondary" href="{% url 'po_list' %}">Back to POs</a>
+  <a class="btn btn-dark" href="{% url 'po_print' po.id %}">Print / Save PDF</a>
+
+  {% if po.status == "DRAFT" %}
+    <form method="post" action="{% url 'po_submit' po.id %}" class="d-inline">
+      {% csrf_token %}
+      <button class="btn btn-primary" type="submit">Submit PO</button>
+    </form>
+  {% endif %}
+
+  {% if po.status != "DRAFT" %}
+    {% if po.approval_required %}
+      <a class="btn btn-warning" href="{% url 'po_approve' po.id %}">Approval Required</a>
+    {% endif %}
+  {% endif %}
+
+  {% if po.shipments.all|length > 0 %}
+    <a class="btn btn-outline-primary" href="{% url 'shipment_list' %}">View Shipments</a>
+    <a class="btn btn-outline-primary" href="{% url 'shipment_detail' po.shipments.last.id %}">Open Latest Shipment</a>
+  {% endif %}
+
+  {% if not po.approval_required and po.status != "DRAFT" %}
+    <a class="btn btn-success" href="{% url 'receive_po' po.id %}">Receive (GRN)</a>
+  {% endif %}
+</div>
+
+<div class="mt-3">
+  <div class="small text-muted">
+    Status: <strong>{{ po.status }}</strong>
+    {% if po.approval_required %}
+      <span class="badge text-bg-warning ms-2">Approval Pending</span>
+    {% elif po.approved_by %}
+      <span class="badge text-bg-success ms-2">Approved</span>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}AR Invoice {{ inv.invoice_number }} — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Invoice {{ inv.invoice_number }}</h2>
+    <div class="text-muted">
+      Customer: <b>{{ inv.customer.name }}</b>
+      <span class="mx-2">•</span>
+      Status:
+      {% if inv.status == "ISSUED" %}<span class="badge text-bg-success">Issued</span>
+      {% else %}<span class="badge text-bg-secondary">{{ inv.status }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/ar/invoices/">Back</a>
+    {% if inv.status == "DRAFT" %}
+      <a class="btn btn-success" href="/ar/invoices/{{ inv.id }}/issue/">Issue</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-light">
+          <tr><th>Product</th><th>Description</th><th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Line</th><th class="text-end">Tax</th></tr>
+        </thead>
+        <tbody>
+          {% for l in inv.lines.all %}
+          <tr>
+            <td>{% if l.product %}{{ l.product.sku }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if l.description %}{{ l.description }}{% else %}{% if l.product %}{{ l.product.name }}{% endif %}{% endif %}</td>
+            <td class="text-end">{{ l.qty|floatformat:2 }}</td>
+            <td class="text-end">{{ l.unit_price|money:inv.currency_code }}</td>
+            <td class="text-end">{{ l.line_total|money:inv.currency_code }}</td>
+            <td class="text-end">{{ l.tax_amount|money:inv.currency_code }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-end mt-3">
+      <div style="min-width: 320px;">
+        <div class="d-flex justify-content-between"><div class="text-muted">Subtotal</div><div class="fw-semibold">{{ inv.subtotal|money:inv.currency_code }}</div></div>
+        <div class="d-flex justify-content-between"><div class="text-muted">VAT</div><div class="fw-semibold">{{ inv.tax_total|money:inv.currency_code }}</div></div>
+        <hr class="my-2"/>
+        <div class="d-flex justify-content-between"><div class="fw-bold">Total</div><div class="fw-bold">{{ inv.total|money:inv.currency_code }}</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

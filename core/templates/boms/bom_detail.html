@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}BOM — {{ bom.product.sku }}{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">BOM: {{ bom.product.sku }}</h2>
+    <div class="text-muted">{{ bom.product.name }} • Manage components</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/boms/">Back</a>
+    <a class="btn btn-outline-danger" href="/boms/{{ bom.id }}/delete/">Delete</a>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card card-soft">
+        <div class="card-body">
+          <h5 class="fw-semibold mb-3">Header</h5>
+          <div class="mb-3">
+            <label class="form-label">Product</label>
+            {{ form.product }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Name</label>
+            {{ form.name }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Active</label>
+            {{ form.is_active }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card card-soft">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-semibold mb-0">Components</h5>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-line-btn">+ Add component</button>
+          </div>
+
+          {{ formset.management_form }}
+
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:55%">Component SKU</th>
+                  <th class="text-end" style="width:15%">Qty</th>
+                  <th style="width:20%">UOM</th>
+                  <th class="text-center" style="width:10%">Remove</th>
+                </tr>
+              </thead>
+              <tbody id="lines-body">
+                {% for f in formset %}
+                <tr class="line-row">
+                  <td>{{ f.component }}</td>
+                  <td class="text-end">{{ f.qty }}</td>
+                  <td>{{ f.uom }}</td>
+                  <td class="text-center"><div class="form-check d-inline-block">{{ f.DELETE }}</div></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <template id="empty-form-template">
+            <tr class="line-row">
+              <td>{{ formset.empty_form.component }}</td>
+              <td class="text-end">{{ formset.empty_form.qty }}</td>
+              <td>{{ formset.empty_form.uom }}</td>
+              <td class="text-center"><div class="form-check d-inline-block">{{ formset.empty_form.DELETE }}</div></td>
+            </tr>
+          </template>
+
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button class="btn btn-primary" type="submit">Save BOM</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+  document.querySelectorAll("select, input, textarea").forEach(el => {
+    if (el.type === "checkbox") el.classList.add("form-check-input");
+    else el.classList.add("form-control");
+  });
+
+  const addBtn = document.getElementById("add-line-btn");
+  const tbody = document.getElementById("lines-body");
+  const template = document.getElementById("empty-form-template");
+
+  function updateAttributes(html, index) { return html.replaceAll("__prefix__", index); }
+
+  addBtn.addEventListener("click", () => {
+    const totalFormsInput = document.querySelector('input[name="{{ formset.prefix }}-TOTAL_FORMS"]');
+    const index = parseInt(totalFormsInput.value, 10);
+    const tempHtml = updateAttributes(template.innerHTML, index);
+    const wrapper = document.createElement("tbody");
+    wrapper.innerHTML = tempHtml.trim();
+    const newRow = wrapper.querySelector("tr");
+    tbody.appendChild(newRow);
+    totalFormsInput.value = index + 1;
+
+    newRow.querySelectorAll("select, input, textarea").forEach(el => {
+      if (el.type === "checkbox") el.classList.add("form-check-input");
+      else el.classList.add("form-control");
+    });
+  });
+</script>
+{% endblock %}

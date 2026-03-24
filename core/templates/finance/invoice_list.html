@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Supplier Invoices — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Supplier Invoices</h2>
+    <div class="text-muted">3-way match: PO ↔ GRN ↔ Invoice</div>
+  </div>
+  <a class="btn btn-primary" href="/invoices/new/">+ Create Invoice</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Invoice</th>
+            <th>Supplier</th>
+            <th>PO</th>
+            <th>GRN</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for i in invoices %}
+          <tr>
+            <td class="fw-semibold"><a class="text-decoration-none" href="/invoices/{{ i.id }}/">{{ i.invoice_number }}</a></td>
+            <td>{{ i.supplier.name }}</td>
+            <td>{{ i.po.po_number }}</td>
+            <td>{{ i.receipt.grn_number }}</td>
+            <td><span class="badge text-bg-light">{{ i.status }}</span></td>
+            <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/invoices/{{ i.id }}/">Open</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-5">No invoices yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

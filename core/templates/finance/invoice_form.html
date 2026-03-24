@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Create Supplier Invoice — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Create Supplier Invoice</h2>
+    <div class="text-muted">Attach invoice and run 3-way match.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/invoices/">Back</a>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card card-soft">
+        <div class="card-body">
+          <h5 class="fw-semibold mb-3">Header</h5>
+          <div class="mb-3"><label class="form-label">Supplier</label>{{ form.supplier }}</div>
+          <div class="mb-3"><label class="form-label">PO</label>{{ form.po }}</div>
+          <div class="mb-3"><label class="form-label">GRN</label>{{ form.receipt }}</div>
+          <div class="mb-3"><label class="form-label">Invoice #</label>{{ form.invoice_number }}</div>
+          <div class="mb-3"><label class="form-label">Invoice Date</label>{{ form.invoice_date }}</div>
+          <div class="mb-3"><label class="form-label">Currency</label>{{ form.currency_code }}</div>
+          <div class="mb-3"><label class="form-label">Attachment</label>{{ form.attachment }}</div>
+          <div class="mb-3"><label class="form-label">Action</label>{{ form.action }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card card-soft">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-semibold mb-0">Lines</h5>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-line-btn">+ Add line</button>
+          </div>
+
+          {{ formset.management_form }}
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:22%">Product</th>
+                  <th style="width:20%">PO line</th>
+                  <th style="width:20%">GRN line</th>
+                  <th style="width:12%" class="text-end">Qty</th>
+                  <th style="width:18%" class="text-end">Unit Cost</th>
+                  <th style="width:8%" class="text-center">Remove</th>
+                </tr>
+              </thead>
+              <tbody id="lines-body">
+                {% for f in formset %}
+                <tr class="line-row">
+                  <td>{{ f.product }}</td>
+                  <td>{{ f.po_line }}</td>
+                  <td>{{ f.receipt_line }}</td>
+                  <td class="text-end">{{ f.qty }}</td>
+                  <td class="text-end">{{ f.unit_cost }}</td>
+                  <td class="text-center">{{ f.DELETE }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <template id="empty-form-template">
+            <tr class="line-row">
+              <td>{{ formset.empty_form.product }}</td>
+              <td>{{ formset.empty_form.po_line }}</td>
+              <td>{{ formset.empty_form.receipt_line }}</td>
+              <td class="text-end">{{ formset.empty_form.qty }}</td>
+              <td class="text-end">{{ formset.empty_form.unit_cost }}</td>
+              <td class="text-center">{{ formset.empty_form.DELETE }}</td>
+            </tr>
+          </template>
+
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <a class="btn btn-outline-secondary" href="/invoices/">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+  document.querySelectorAll("select, input, textarea").forEach(el => {
+    if (el.type === "checkbox") el.classList.add("form-check-input");
+    else el.classList.add("form-control");
+  });
+
+  const addBtn = document.getElementById("add-line-btn");
+  const tbody = document.getElementById("lines-body");
+  const template = document.getElementById("empty-form-template");
+
+  function updateAttributes(html, index) {
+    return html.replaceAll("__prefix__", index);
+  }
+
+  addBtn.addEventListener("click", () => {
+    const totalFormsInput = document.querySelector('input[name="{{ formset.prefix }}-TOTAL_FORMS"]');
+    const index = parseInt(totalFormsInput.value, 10);
+    const tempHtml = updateAttributes(template.innerHTML, index);
+    const wrapper = document.createElement("tbody");
+    wrapper.innerHTML = tempHtml.trim();
+    const newRow = wrapper.querySelector("tr");
+    tbody.appendChild(newRow);
+    totalFormsInput.value = index + 1;
+
+    newRow.querySelectorAll("select, input, textarea").forEach(el => {
+      if (el.type === "checkbox") el.classList.add("form-check-input");
+      else el.classList.add("form-control");
+    });
+  });
+</script>
+{% endblock %}

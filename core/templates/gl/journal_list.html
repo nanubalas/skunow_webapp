@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}Journal — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Journal Entries</h2>
+    <div class="text-muted">System-generated postings (AR/AP). Manual journals can be added later.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/gl/accounts/">Chart of Accounts</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr><th>Date</th><th>Ref</th><th>Memo</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+          <tr>
+            <td class="text-muted">{{ e.entry_date|date:"d M Y" }}</td>
+            <td><span class="badge text-bg-light">{{ e.ref_type }}</span> {{ e.ref_id }}</td>
+            <td>{{ e.memo }}</td>
+            <td class="text-end">{{ e.total_debit|money:tenant.currency_code }}</td>
+            <td class="text-end">{{ e.total_credit|money:tenant.currency_code }}</td>
+            <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/gl/journal/{{ e.id }}/">Open</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-5">No entries yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+
+{% extends "base.html" %}
+{% block title %}Cycle Counts — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Cycle Counts</h2>
+    <div class="text-muted">Count stock, approve variances, and post adjustments with audit trail.</div>
+  </div>
+  <a class="btn btn-primary" href="/cycle-counts/new/">+ New Cycle Count</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th class="text-end">Count Date</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cc in cycle_counts %}
+          <tr>
+            <td class="fw-semibold">#{{ cc.id }}</td>
+            <td>{{ cc.location.name }}</td>
+            <td><span class="badge text-bg-light">{{ cc.status }}</span></td>
+            <td class="text-end text-muted">{{ cc.count_date|date:"d M Y" }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="/cycle-counts/{{ cc.id }}/">Open</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-5">No cycle counts yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

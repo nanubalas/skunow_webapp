@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Settings — Tenant{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Settings</h2>
+    <div class="text-muted">Company profile and system preferences.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/">Back</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card card-soft">
+      <div class="card-body p-4">
+        <h5 class="fw-semibold mb-3">Company</h5>
+
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label">Company name</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Currency</label>
+            {{ form.currency_code }}
+            <div class="form-text">
+              Used for POs, receipts, and reporting.
+            </div>
+            {% if form.currency_code.errors %}<div class="text-danger small">{{ form.currency_code.errors }}</div>{% endif %}
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a class="btn btn-outline-secondary" href="/">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save Settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card card-soft">
+      <div class="card-body p-4">
+        <h5 class="fw-semibold mb-2">Notes</h5>
+        <p class="text-muted mb-0">
+          Changing currency updates how amounts are displayed across SKUNOW.
+          Existing records keep numeric values; only the symbol/format changes.
+          If you want multi-currency per PO later, we’ll add currency per document.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("input, select, textarea").forEach(el => el.classList.add("form-control"));
+</script>
+{% endblock %}

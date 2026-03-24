@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Inventory Balances</h2>
+<table class="table table-hover bg-white">
+  <tr><th>SKU</th><th>Product</th><th>Location</th><th>On hand</th><th>Reserved</th></tr>
+  {% for b in balances %}
+    <tr>
+      <td>{{ b.product.sku }}</td>
+      <td>{{ b.product.name }}</td>
+      <td>{{ b.location.name }}</td>
+      <td>{{ b.on_hand }}</td>
+      <td>{{ b.reserved }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5">No inventory yet. Receive a PO or sync a channel.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Locations — SKUNOW{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Locations</h2>
+    <div class="text-muted">Warehouses and 3PL nodes where inventory is held.</div>
+  </div>
+  <a class="btn btn-primary" href="/locations/new/">+ Create Location</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in locations %}
+          <tr>
+            <td class="fw-semibold">{{ l.name }}</td>
+            <td><span class="badge text-bg-light">{{ l.type }}</span></td>
+            <td class="text-end">
+              <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href="/locations/{{ l.id }}/edit/">Edit</a>
+                <a class="btn btn-sm btn-outline-danger" href="/locations/{{ l.id }}/delete/">Delete</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="text-center text-muted py-5">
+              No locations yet. Create your main warehouse first.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

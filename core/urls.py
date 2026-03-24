@@ -1,0 +1,128 @@
+from django.urls import path
+from core import views
+
+urlpatterns = [
+    path("", views.landing, name="landing"),
+
+    # Purchase Orders
+    path("po/", views.po_list, name="po_list"),
+    path("po/new/", views.po_create, name="po_create"),
+    path("po/<int:po_id>/", views.po_detail, name="po_detail"),
+    path("po/<int:po_id>/approve/", views.po_approve, name="po_approve"),
+    path("po/<int:po_id>/submit/", views.po_submit, name="po_submit"),
+    path("po/<int:po_id>/send/", views.po_send, name="po_send"),
+    path("po/<int:po_id>/amend/", views.po_amend, name="po_amend"),
+    path("po/<int:po_id>/cancel/", views.po_cancel, name="po_cancel"),
+    path("po/<int:po_id>/print/", views.po_print, name="po_print"),
+    path("po/<int:po_id>/receive/", views.receive_po, name="receive_po"),
+
+    # Shipments
+    path("po/<int:po_id>/shipments/new/", views.shipment_new, name="shipment_new"),
+    path("shipments/", views.shipment_list, name="shipment_list"),
+    path("shipments/<int:shipment_id>/", views.shipment_detail, name="shipment_detail"),
+    path("shipment/<int:shipment_id>/", views.shipment_update, name="shipment_update"),
+
+    # Settings
+    path("settings/tenant/", views.settings_tenant, name="settings_tenant"),
+
+    # Master Data
+    path("products/", views.product_list, name="product_list"),
+    path("products/new/", views.product_create, name="product_create"),
+    path("products/<int:product_id>/edit/", views.product_edit, name="product_edit"),
+    path("products/<int:product_id>/delete/", views.product_delete, name="product_delete"),
+
+    path("suppliers/", views.supplier_list, name="supplier_list"),
+    path("suppliers/new/", views.supplier_create, name="supplier_create"),
+    path("suppliers/<int:supplier_id>/edit/", views.supplier_edit, name="supplier_edit"),
+    path("suppliers/<int:supplier_id>/delete/", views.supplier_delete, name="supplier_delete"),
+
+    path("locations/", views.location_list, name="location_list"),
+    path("locations/new/", views.location_create, name="location_create"),
+    path("locations/<int:location_id>/edit/", views.location_edit, name="location_edit"),
+    path("locations/<int:location_id>/delete/", views.location_delete, name="location_delete"),
+
+    # Inventory
+    path("inventory/", views.inventory_list, name="inventory_list"),
+
+    # Transfers
+    path("transfers/", views.transfer_list, name="transfer_list"),
+    path("transfers/new/", views.transfer_create, name="transfer_create"),
+    path("transfers/<int:transfer_id>/", views.transfer_detail, name="transfer_detail"),
+    path("transfers/<int:transfer_id>/post/", views.transfer_post, name="transfer_post"),
+
+    # Channels
+    path("channels/", views.channel_list, name="channel_list"),
+    path("channels/new/", views.channel_create, name="channel_create"),
+    path("channels/<int:conn_id>/edit/", views.channel_edit, name="channel_edit"),
+    path("channels/<int:conn_id>/delete/", views.channel_delete, name="channel_delete"),
+
+    # Sales Orders
+    path("sales-orders/", views.sales_order_list, name="sales_order_list"),
+    path("sales-orders/new/", views.sales_order_create, name="sales_order_create"),
+    path("sales-orders/<int:order_id>/", views.sales_order_detail, name="sales_order_detail"),
+    path("sales-orders/<int:order_id>/post/", views.sales_order_post, name="sales_order_post"),
+
+    # Reconcile
+    path("reconcile/", views.reconcile, name="reconcile"),
+
+    # UOMs
+    path("uoms/", views.uom_list, name="uom_list"),
+    path("uoms/new/", views.uom_create, name="uom_create"),
+    path("uoms/<int:uom_id>/edit/", views.uom_edit, name="uom_edit"),
+    path("uoms/<int:uom_id>/delete/", views.uom_delete, name="uom_delete"),
+
+    path("uom-conversions/", views.uom_conversion_list, name="uom_conversion_list"),
+    path("uom-conversions/new/", views.uom_conversion_create, name="uom_conversion_create"),
+    path("uom-conversions/<int:conv_id>/edit/", views.uom_conversion_edit, name="uom_conversion_edit"),
+    path("uom-conversions/<int:conv_id>/delete/", views.uom_conversion_delete, name="uom_conversion_delete"),
+
+    # BOMs
+    path("boms/", views.bom_list, name="bom_list"),
+    path("boms/new/", views.bom_create, name="bom_create"),
+    path("boms/<int:bom_id>/", views.bom_detail, name="bom_detail"),
+    path("boms/<int:bom_id>/delete/", views.bom_delete, name="bom_delete"),
+
+    # Cycle Counts
+    path("cycle-counts/", views.cycle_count_list, name="cycle_count_list"),
+    path("cycle-counts/new/", views.cycle_count_create, name="cycle_count_create"),
+    path("cycle-counts/<int:cc_id>/", views.cycle_count_detail, name="cycle_count_detail"),
+    path("cycle-counts/<int:cc_id>/submit/", views.cycle_count_submit, name="cycle_count_submit"),
+    path("cycle-counts/<int:cc_id>/approve/", views.cycle_count_approve, name="cycle_count_approve"),
+    path("cycle-counts/<int:cc_id>/post/", views.cycle_count_post, name="cycle_count_post"),
+
+    # VAT / Tax
+path("tax-codes/", views.taxcode_list, name="taxcode_list"),
+path("tax-codes/new/", views.taxcode_create, name="taxcode_create"),
+path("tax-codes/<int:tax_id>/edit/", views.taxcode_edit, name="taxcode_edit"),
+path("tax-codes/<int:tax_id>/delete/", views.taxcode_delete, name="taxcode_delete"),
+
+# Customers
+path("customers/", views.customer_list, name="customer_list"),
+path("customers/new/", views.customer_create, name="customer_create"),
+path("customers/<int:customer_id>/edit/", views.customer_edit, name="customer_edit"),
+
+# Accounts Receivable
+path("ar/invoices/", views.ar_invoice_list, name="ar_invoice_list"),
+path("ar/invoices/new/", views.ar_invoice_create, name="ar_invoice_create"),
+path("ar/invoices/<int:invoice_id>/", views.ar_invoice_detail, name="ar_invoice_detail"),
+path("ar/invoices/<int:invoice_id>/issue/", views.ar_invoice_issue, name="ar_invoice_issue"),
+
+# General Ledger
+path("gl/accounts/", views.gl_account_list, name="gl_account_list"),
+path("gl/accounts/new/", views.gl_account_create, name="gl_account_create"),
+path("gl/accounts/<int:account_id>/edit/", views.gl_account_edit, name="gl_account_edit"),
+path("gl/journal/", views.journal_list, name="journal_list"),
+path("gl/journal/<int:je_id>/", views.journal_detail, name="journal_detail"),
+
+# AP Posting
+path("invoices/<int:invoice_id>/post/", views.invoice_post, name="invoice_post"),
+
+    # Finance
+    path("invoices/", views.invoice_list, name="invoice_list"),
+    path("invoices/new/", views.invoice_create, name="invoice_create"),
+    path("invoices/<int:invoice_id>/", views.invoice_detail, name="invoice_detail"),
+    path("returns/", views.return_list, name="return_list"),
+    path("returns/new/", views.return_create, name="return_create"),
+    path("returns/<int:rma_id>/", views.return_detail, name="return_detail"),
+    path("returns/<int:rma_id>/process/", views.return_process, name="return_process"),
+]

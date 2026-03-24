@@ -1,0 +1,22 @@
+
+{% extends "base.html" %}
+{% block title %}Post Cycle Count — SKUNOW{% endblock %}
+{% block body %}
+<div class="card card-soft">
+  <div class="card-body p-4">
+    <h3 class="fw-bold mb-2">Post Cycle Count #{{ cc.id }}</h3>
+    <p class="text-muted mb-4">
+      Posting will create ADJUSTMENT inventory movements for all variances at <b>{{ cc.location.name }}</b>.
+      This action should only be done after approval.
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="/cycle-counts/{{ cc.id }}/">Cancel</a>
+        <button class="btn btn-success" type="submit">Post Adjustments</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

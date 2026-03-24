@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Receive PO {{ po.po_number }}{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Receive Goods</h2>
+    <div class="text-muted">Post a goods receipt against PO <b>{{ po.po_number }}</b>.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/po/{{ po.id }}/">Back to PO</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h5 class="fw-semibold mb-3">Receipt Details</h5>
+
+        <div class="mb-2"><span class="text-muted">Supplier:</span> <b>{{ po.supplier.name }}</b></div>
+        <div class="mb-2"><span class="text-muted">Destination:</span> <b>{{ shipment.destination.name }}</b></div>
+        <div class="mb-2"><span class="text-muted">Expected:</span>
+          {% if po.expected_date %}<b>{{ po.expected_date|date:"d M Y" }}</b>{% else %}<span class="text-muted">—</span>{% endif %}
+        </div>
+
+        <div class="alert alert-warning mt-3 mb-0">
+          <div class="fw-semibold">Partial receipts are allowed.</div>
+          <div class="small">
+            Enter the quantity received now. SKUNOW will update inventory balances and keep the remaining quantity open.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h5 class="fw-semibold mb-3">Line Items</h5>
+
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="shipment_id" value="{{ shipment.id }}">
+          {% csrf_token %}
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <label class="form-label">GRN Number</label>
+    <input class="form-control" name="grn_number" value="{{ default_grn }}" />
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Attachment (Packing slip)</label>
+    <input class="form-control" type="file" name="attachment" />
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Landed Cost (optional)</label>
+    <div class="input-group">
+      <input class="form-control" name="landed_cost_name" placeholder="Freight/Duty" />
+      <input class="form-control" name="landed_cost_amount" placeholder="0.00" />
+    </div>
+  </div>
+</div>
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>SKU</th>
+                  <th>Description</th>
+                  <th class="text-end">Open Qty</th>
+                  <th>Lot</th><th>Serial</th><th>Expiry</th><th class="text-end">Receive Now</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for sl in shipment.lines.all %}
+            <tr>
+              <td>{{ sl.po_line.product.sku }}<div class="text-muted small">{{ sl.po_line.product.name }}</div></td>
+              <td class="text-end">{{ sl.open_qty|floatformat:2 }}</td>
+              <td style="width:160px">
+                <input class="form-control form-control-sm text-end" name="recv_{{ sl.id }}" placeholder="0" />
+              </td>
+              <td style="width:140px"><input class="form-control form-control-sm" name="lot_{{ sl.id }}" placeholder="Lot" /></td>
+              <td style="width:140px"><input class="form-control form-control-sm" name="serial_{{ sl.id }}" placeholder="Serial" /></td>
+              <td style="width:160px"><input class="form-control form-control-sm" type="date" name="expiry_{{ sl.id }}" /></td>
+            </tr>
+          {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a class="btn btn-outline-secondary" href="/po/{{ po.id }}/">Cancel</a>
+            <button class="btn btn-success" type="submit">Post Receipt</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

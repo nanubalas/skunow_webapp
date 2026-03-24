@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}BOMs — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Bills of Materials</h2>
+    <div class="text-muted">Define kits/bundles: selling the parent SKU can consume component SKUs (next step).</div>
+  </div>
+  <a class="btn btn-primary" href="/boms/new/">+ Create BOM</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Product</th>
+            <th>Name</th>
+            <th>Active</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in boms %}
+          <tr>
+            <td class="fw-semibold">{{ b.product.sku }} — {{ b.product.name }}</td>
+            <td>{{ b.name }}</td>
+            <td>
+              {% if b.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-secondary">No</span>{% endif %}
+            </td>
+            <td class="text-end">
+              <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href="/boms/{{ b.id }}/">Open</a>
+                <a class="btn btn-sm btn-outline-danger" href="/boms/{{ b.id }}/delete/">Delete</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-5">No BOMs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

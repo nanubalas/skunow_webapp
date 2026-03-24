@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Suppliers — SKUNOW{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Suppliers</h2>
+    <div class="text-muted">Manage supplier master data used in procurement.</div>
+  </div>
+  <a class="btn btn-primary" href="/suppliers/new/">+ Create Supplier</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in suppliers %}
+          <tr>
+            <td class="fw-semibold">{{ s.name }}</td>
+            <td>{% if s.email %}{{ s.email }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if s.phone %}{{ s.phone }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="text-end">
+              <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href="/suppliers/{{ s.id }}/edit/">Edit</a>
+                <a class="btn btn-sm btn-outline-danger" href="/suppliers/{{ s.id }}/delete/">Delete</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-5">
+              No suppliers yet. Create your first supplier to raise POs.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

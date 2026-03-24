@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "create" %}Create Connection{% else %}Edit Connection{% endif %} — SKUNOW{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">
+      {% if mode == "create" %}Create Connection{% else %}Edit Connection{% endif %}
+    </h2>
+    <div class="text-muted">Used for inventory snapshots and order sync.</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/channels/">Back</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body p-4">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Channel</label>
+          {{ form.channel }}
+          {% if form.channel.errors %}<div class="text-danger small">{{ form.channel.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-8">
+          <label class="form-label">Connection name</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Shop domain (Shopify)</label>
+          {{ form.shop_domain }}
+          <div class="form-text">Example: yourstore.myshopify.com</div>
+          {% if form.shop_domain.errors %}<div class="text-danger small">{{ form.shop_domain.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-12">
+          <label class="form-label">Access token</label>
+          {{ form.access_token }}
+          <div class="form-text">For MVP only. Move to env vars / secrets manager later.</div>
+          {% if form.access_token.errors %}<div class="text-danger small">{{ form.access_token.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="/channels/">Cancel</a>
+        <button class="btn btn-primary" type="submit">
+          {% if mode == "create" %}Create{% else %}Save changes{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("input, select, textarea").forEach(el => el.classList.add("form-control"));
+</script>
+{% endblock %}

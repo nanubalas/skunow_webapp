@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Update Shipment ({{ shipment.po.po_number }})</h2>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Transfer {{ transfer.transfer_number }} — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Transfer {{ transfer.transfer_number }}</h2>
+    <div class="text-muted">
+      {{ transfer.from_location.name }} → {{ transfer.to_location.name }}
+      <span class="mx-2">•</span>
+      <span class="badge text-bg-light">{{ transfer.status }}</span>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/transfers/">Back</a>
+    {% if transfer.status != "POSTED" %}
+      <a class="btn btn-success" href="/transfers/{{ transfer.id }}/post/">Post</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <h5 class="fw-semibold mb-3">Lines</h5>
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>SKU</th>
+            <th>Description</th>
+            <th class="text-end">Qty</th>
+            <th>Lot</th>
+            <th>Serial</th>
+            <th>Expiry</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in transfer.lines.all %}
+          <tr>
+            <td class="fw-semibold">{{ l.product.sku }}</td>
+            <td>{{ l.product.name }}</td>
+            <td class="text-end">{{ l.qty|floatformat:2 }}</td>
+            <td>{{ l.lot_code|default:"—" }}</td>
+            <td>{{ l.serial_number|default:"—" }}</td>
+            <td>{% if l.expiry_date %}{{ l.expiry_date|date:"d M Y" }}{% else %}—{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No lines.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

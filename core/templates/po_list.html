@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Purchase Orders</h2>
+    <div class="text-muted">Create, track, print, and receive purchase orders.</div>
+  </div>
+  <a class="btn btn-primary" href="/po/new/">Create PO</a>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body">
+    <div class="row g-2 align-items-center mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text">Search</span>
+          <input class="form-control" placeholder="PO number / supplier..." />
+        </div>
+        <div class="form-text">Search is UI-only for now (we’ll wire it next).</div>
+      </div>
+      <div class="col-md-6 text-md-end">
+        <span class="text-muted">Total:</span>
+        <span class="fw-semibold">{{ pos|length }}</span>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>PO</th>
+            <th>Supplier</th>
+            <th>Status</th>
+            <th>Expected</th>
+            <th class="text-end">Created</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for po in pos %}
+          <tr>
+            <td class="fw-semibold">
+              <a href="/po/{{ po.id }}/" class="text-decoration-none">{{ po.po_number }}</a>
+            </td>
+            <td>{{ po.supplier.name }}</td>
+            <td>
+              {% if po.status == "DRAFT" %}
+                <span class="badge text-bg-secondary">Draft</span>
+              {% elif po.status == "SUBMITTED" %}
+                <span class="badge text-bg-primary">Submitted</span>
+              {% elif po.status == "IN_TRANSIT" %}
+                <span class="badge text-bg-info">In Transit</span>
+              {% elif po.status == "PARTIALLY_RECEIVED" %}
+                <span class="badge text-bg-warning">Partially Received</span>
+              {% elif po.status == "RECEIVED" %}
+                <span class="badge text-bg-success">Received</span>
+              {% else %}
+                <span class="badge text-bg-dark">{{ po.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if po.expected_date %}
+                {{ po.expected_date|date:"d M Y" }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-muted">{{ po.created_at|date:"d M Y" }}</td>
+            <td class="text-end">
+              <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href="/po/{{ po.id }}/">View</a>
+                <a class="btn btn-sm btn-outline-dark" href="/po/{{ po.id }}/print/" target="_blank">Print</a>
+                {% if po.status != "RECEIVED" %}
+                  <a class="btn btn-sm btn-outline-success" href="/po/{{ po.id }}/receive/">Receive</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-5">
+              No purchase orders yet. Click <b>Create PO</b> to raise your first one.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

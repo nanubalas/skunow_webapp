@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}Journal Entry {{ je.id }} — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">Journal Entry {{ je.id }}</h2>
+    <div class="text-muted">
+      {{ je.entry_date|date:"d M Y" }} • {{ je.ref_type }} {{ je.ref_id }}
+    </div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/gl/journal/">Back</a>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0">
+        <thead class="table-light">
+          <tr><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr>
+        </thead>
+        <tbody>
+          {% for l in je.lines.all %}
+          <tr>
+            <td class="fw-semibold">{{ l.account.code }} - {{ l.account.name }}</td>
+            <td>{{ l.description }}</td>
+            <td class="text-end">{{ l.debit|money:tenant.currency_code }}</td>
+            <td class="text-end">{{ l.credit|money:tenant.currency_code }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-end mt-3">
+      <div style="min-width: 260px;">
+        <div class="d-flex justify-content-between"><div class="text-muted">Total debit</div><div class="fw-semibold">{{ je.total_debit|money:tenant.currency_code }}</div></div>
+        <div class="d-flex justify-content-between"><div class="text-muted">Total credit</div><div class="fw-semibold">{{ je.total_credit|money:tenant.currency_code }}</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

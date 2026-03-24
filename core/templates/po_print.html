@@ -1,0 +1,146 @@
+{% load money %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Purchase Order {{ po.po_number }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #111; }
+    .top { display: flex; justify-content: space-between; gap: 24px; }
+    .muted { color: #666; font-size: 12px; }
+    h1 { margin: 0 0 6px 0; font-size: 22px; letter-spacing: .3px; }
+    h2 { margin: 0; font-size: 16px; }
+    .box { border: 1px solid #ddd; padding: 12px; border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #ddd; padding: 10px; font-size: 13px; }
+    th { background: #f6f6f6; text-align: left; }
+    .right { text-align: right; }
+    .totals { width: 320px; margin-left: auto; margin-top: 12px; }
+    .totals td { border: none; padding: 6px 0; }
+    .totals .line { border-top: 1px solid #ddd; }
+    .footer { margin-top: 28px; display: flex; justify-content: space-between; gap: 24px; }
+    .sig { margin-top: 34px; border-top: 1px solid #bbb; padding-top: 8px; font-size: 12px; color: #666; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom: 12px;">
+  <button onclick="window.print()" style="padding:10px 14px;border:1px solid #111;border-radius:10px;background:#111;color:#fff;cursor:pointer;">
+    Print / Save as PDF
+  </button>
+</div>
+
+<div class="top">
+  <div>
+    <h1>PURCHASE ORDER</h1>
+    <div class="muted">PO Number</div>
+    <div style="font-weight:700;">{{ po.po_number }}</div>
+    <div class="muted" style="margin-top:10px;">Issue Date</div>
+    <div>{{ po.created_at|date:"d M Y" }}</div>
+    <div class="muted" style="margin-top:10px;">Expected Delivery</div>
+    <div>{% if po.expected_date %}{{ po.expected_date|date:"d M Y" }}{% else %}—{% endif %}</div>
+  </div>
+
+  <div class="box" style="min-width: 320px;">
+    <h2>{{ tenant.name }}</h2>
+    <div class="muted">Buyer</div>
+
+    <div style="margin-top:6px;">
+      {% if tenant.address_line1 %}{{ tenant.address_line1 }}<br/>{% endif %}
+      {% if tenant.address_line2 %}{{ tenant.address_line2 }}<br/>{% endif %}
+
+      {# optional: city/country if you add fields later #}
+      {# {% if tenant.city %}{{ tenant.city }}{% endif %}{% if tenant.country %}, {{ tenant.country }}{% endif %}<br/> #}
+
+      {% if tenant.email %}
+        <span class="muted">Email:</span> {{ tenant.email }}<br/>
+      {% endif %}
+
+      {% if tenant.vat_number %}
+        <span class="muted">VAT:</span> {{ tenant.vat_number }}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div style="display:flex; gap:16px; margin-top:16px;">
+  <div class="box" style="flex:1;">
+    <div class="muted">Supplier</div>
+    <div style="font-weight:700; margin-top:6px;">{{ po.supplier.name }}</div>
+    <div style="margin-top:6px;">
+      {% if po.supplier.email %}{{ po.supplier.email }}<br/>{% endif %}
+      {% if po.supplier.phone %}{{ po.supplier.phone }}{% endif %}
+    </div>
+  </div>
+
+  <div class="box" style="flex:1;">
+    <div class="muted">Ship To</div>
+    <div style="font-weight:700; margin-top:6px;">Main Warehouse</div>
+    <div style="margin-top:6px;">
+      Warehouse Address Line 1<br/>
+      Warehouse Address Line 2<br/>
+      Leicester, UK
+    </div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:16%;">SKU</th>
+      <th>Description</th>
+      <th class="right" style="width:12%;">Qty</th>
+      <th class="right" style="width:16%;">Unit Price</th>
+      <th class="right" style="width:18%;">Line Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in po.lines.all %}
+    <tr>
+      <td>{{ line.product.sku }}</td>
+      <td>{{ line.product.name }}</td>
+      <td class="right">{{ line.ordered_qty|floatformat:2 }}</td>
+      <td class="right">£{{ line.unit_cost|floatformat:2 }}</td>
+      <td class="right">£{{ line.line_total|money:tenant.currency_code }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<table class="totals">
+  <tr>
+    <td class="muted right">Subtotal</td>
+    <td class="right">£{{ subtotal|floatformat:2 }}</td>
+  </tr>
+  <tr>
+    <td class="muted right">VAT ({{ vat_rate_percent }}%)</td>
+    <td class="right">£{{ vat_amount|floatformat:2 }}</td>
+  </tr>
+  <tr class="line">
+    <td class="right" style="font-weight:700; padding-top:10px;">TOTAL</td>
+    <td class="right" style="font-weight:700; padding-top:10px;">£{{ total|floatformat:2 }}</td>
+  </tr>
+</table>
+
+<div class="footer">
+  <div style="flex:1;">
+    <div class="muted">Notes</div>
+    <div style="margin-top:6px;">{% if po.notes %}{{ po.notes }}{% else %}—{% endif %}</div>
+
+    <div style="margin-top:16px;">
+      <div><b>Payment Terms:</b> Net 30 days</div>
+      <div><b>Delivery Terms:</b> DDP (Delivered Duty Paid)</div>
+    </div>
+  </div>
+
+  <div style="flex:1;">
+    <div class="sig">Authorized By (Buyer)</div>
+    <div class="sig">Supplier Confirmation</div>
+  </div>
+</div>
+
+</body>
+</html>

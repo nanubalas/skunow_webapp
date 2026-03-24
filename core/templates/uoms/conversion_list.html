@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}UOM Conversions — SKUNOW{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">UOM Conversions</h2>
+    <div class="text-muted">Define conversions (global or per product).</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/uoms/">UOMs</a>
+    <a class="btn btn-primary" href="/uom-conversions/new/">+ Create Conversion</a>
+  </div>
+</div>
+
+<div class="card card-soft">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Scope</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Multiplier</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in conversions %}
+          <tr>
+            <td>{% if c.product %}<span class="badge text-bg-light">{{ c.product.sku }}</span>{% else %}<span class="badge text-bg-secondary">GLOBAL</span>{% endif %}</td>
+            <td class="fw-semibold">{{ c.from_uom.code }}</td>
+            <td class="fw-semibold">{{ c.to_uom.code }}</td>
+            <td>{{ c.multiplier }}</td>
+            <td class="text-end">
+              <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href="/uom-conversions/{{ c.id }}/edit/">Edit</a>
+                <a class="btn btn-sm btn-outline-danger" href="/uom-conversions/{{ c.id }}/delete/">Delete</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-5">No conversions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
