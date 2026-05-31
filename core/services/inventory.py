@@ -1,7 +1,10 @@
 from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.db.models import Sum
-from core.models import InventoryBalance, InventoryLotBalance, InventoryMovement, InventoryReservation
+from core.models import (
+    InventoryBalance, InventoryLotBalance, InventoryMovement, InventoryReservation,
+    InventoryCostLayer, Product,
+)
 
 CENTS = Decimal("0.01")
 COST_DP = Decimal("0.0001")
@@ -10,6 +13,29 @@ COST_DP = Decimal("0.0001")
 def _total_on_hand(tenant, product):
     agg = InventoryBalance.objects.filter(tenant=tenant, product=product).aggregate(s=Sum("on_hand"))
     return agg["s"] or Decimal("0.00")
+
+
+def _consume_fifo_layers(tenant, product, qty, fallback_cost):
+    """Consume `qty` from the product's oldest FIFO layers; return the total
+    cost consumed. If layers run dry (negative stock allowed), the shortfall is
+    valued at `fallback_cost`."""
+    remaining = qty
+    cost = Decimal("0.00")
+    layers = (InventoryCostLayer.objects
+              .select_for_update()
+              .filter(tenant=tenant, product=product, qty_remaining__gt=0)
+              .order_by("received_at", "id"))
+    for layer in layers:
+        if remaining <= 0:
+            break
+        take = min(remaining, layer.qty_remaining)
+        cost += take * layer.unit_cost
+        layer.qty_remaining -= take
+        layer.save(update_fields=["qty_remaining"])
+        remaining -= take
+    if remaining > 0:
+        cost += remaining * (fallback_cost or Decimal("0.0000"))
+    return cost
 
 
 @transaction.atomic
@@ -44,20 +70,39 @@ def apply_movement(*, tenant, product, location, movement_type, qty_delta, ref_t
 
     # ----- Valuation -----
     prior_avg = product.average_cost or Decimal("0.0000")
-    if qty_delta > 0 and unit_cost is not None:
-        # Inbound at a known cost -> recompute moving average.
-        unit_cost = Decimal(unit_cost)
-        new_qty = prior_qty + qty_delta
-        if new_qty > 0:
-            new_avg = ((prior_qty * prior_avg) + (qty_delta * unit_cost)) / new_qty
-            product.average_cost = new_avg.quantize(COST_DP, rounding=ROUND_HALF_UP)
-            product.save(update_fields=["average_cost"])
-        move_unit_cost = unit_cost
-    else:
-        # Outbound, or inbound without an explicit cost: value at current average.
-        move_unit_cost = prior_avg
+    is_fifo = product.cost_method == Product.CostMethod.FIFO
 
-    value = (qty_delta * move_unit_cost).quantize(CENTS, rounding=ROUND_HALF_UP)
+    if qty_delta > 0:
+        # Inbound. Cost basis = explicit unit_cost, else current average.
+        cost_in = Decimal(unit_cost) if unit_cost is not None else prior_avg
+
+        # Maintain moving average for all methods (used for display + AVERAGE).
+        if unit_cost is not None:
+            new_qty = prior_qty + qty_delta
+            if new_qty > 0:
+                new_avg = ((prior_qty * prior_avg) + (qty_delta * cost_in)) / new_qty
+                product.average_cost = new_avg.quantize(COST_DP, rounding=ROUND_HALF_UP)
+                product.save(update_fields=["average_cost"])
+
+        # FIFO products also get a cost layer.
+        if is_fifo:
+            InventoryCostLayer.objects.create(
+                tenant=tenant, product=product,
+                qty_received=qty_delta, qty_remaining=qty_delta,
+                unit_cost=cost_in, ref_type=ref_type, ref_id=str(ref_id),
+            )
+        move_unit_cost = cost_in
+        value = (qty_delta * move_unit_cost).quantize(CENTS, rounding=ROUND_HALF_UP)
+    else:
+        # Outbound.
+        out_qty = -qty_delta
+        if is_fifo:
+            cost = _consume_fifo_layers(tenant, product, out_qty, prior_avg)
+            value = (-cost).quantize(CENTS, rounding=ROUND_HALF_UP)
+            move_unit_cost = (cost / out_qty).quantize(COST_DP, rounding=ROUND_HALF_UP) if out_qty else prior_avg
+        else:
+            move_unit_cost = prior_avg
+            value = (qty_delta * move_unit_cost).quantize(CENTS, rounding=ROUND_HALF_UP)
 
     movement = InventoryMovement.objects.create(
         tenant=tenant,

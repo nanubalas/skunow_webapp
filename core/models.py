@@ -424,6 +424,26 @@ class InventoryMovement(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
 
 
+class InventoryCostLayer(models.Model):
+    """A FIFO cost layer: a tranche of stock received at a known unit cost.
+
+    Used only for products whose cost_method is FIFO. Outbound movements
+    consume layers oldest-first (by received_at, id)."""
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="cost_layers")
+    received_at = models.DateTimeField(default=timezone.now)
+    qty_received = models.DecimalField(max_digits=12, decimal_places=2)
+    qty_remaining = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=4)
+    ref_type = models.CharField(max_length=50, blank=True, null=True)
+    ref_id = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [models.Index(fields=["tenant", "product", "qty_remaining"])]
+        ordering = ["received_at", "id"]
+
+
 # ---------- Phase 2 (Channel Sync) ----------
 
 class SalesChannel(models.TextChoices):

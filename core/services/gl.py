@@ -10,6 +10,7 @@ DEFAULT_ACCOUNT_CODES = {
     "ar": "1100",
     "ap": "2000",
     "grni": "2100",
+    "accruals": "2150",
     "vat_output": "2200",
     "vat_input": "1300",
     "sales": "4000",
@@ -148,18 +149,27 @@ def post_payment(payment, user=None) -> JournalEntry:
 
 
 @transaction.atomic
-def post_inventory_receipt(tenant, value, ref_id, user=None, entry_date=None):
-    """Capitalize received stock: DR Inventory / CR GRNI."""
+def post_inventory_receipt(tenant, value, ref_id, user=None, entry_date=None, landed_value=Decimal("0.00")):
+    """Capitalize received stock.
+
+    DR Inventory (goods + landed) / CR GRNI (goods) / CR Accruals (landed).
+    `value` is the goods cost; `landed_value` is freight/duty accrued separately.
+    """
     value = Decimal(value)
-    if value <= Decimal("0.00"):
+    landed_value = Decimal(landed_value or "0.00")
+    total = value + landed_value
+    if total <= Decimal("0.00"):
         return None
     je = JournalEntry.objects.create(
         tenant=tenant, entry_date=entry_date or timezone.now().date(),
         ref_type="GRN", ref_id=str(ref_id), memo=f"Goods received {ref_id}",
         posted_by=user, posted_at=timezone.now(),
     )
-    JournalLine.objects.create(entry=je, account=_acc(tenant, "inventory"), description="Inventory", debit=value, credit=Decimal("0.00"))
-    JournalLine.objects.create(entry=je, account=_acc(tenant, "grni"), description="GRNI", debit=Decimal("0.00"), credit=value)
+    JournalLine.objects.create(entry=je, account=_acc(tenant, "inventory"), description="Inventory", debit=total, credit=Decimal("0.00"))
+    if value > Decimal("0.00"):
+        JournalLine.objects.create(entry=je, account=_acc(tenant, "grni"), description="GRNI", debit=Decimal("0.00"), credit=value)
+    if landed_value > Decimal("0.00"):
+        JournalLine.objects.create(entry=je, account=_acc(tenant, "accruals"), description="Landed cost accrual", debit=Decimal("0.00"), credit=landed_value)
     return je
 
 

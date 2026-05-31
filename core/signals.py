@@ -16,6 +16,7 @@ DEFAULT_ACCOUNTS = [
     ("1100", "Accounts Receivable", "ASSET"),
     ("2000", "Accounts Payable", "LIABILITY"),
     ("2100", "GRNI (Goods Received Not Invoiced)", "LIABILITY"),
+    ("2150", "Accruals (Landed Costs)", "LIABILITY"),
     ("2200", "VAT Output", "LIABILITY"),
     ("1300", "VAT Input", "ASSET"),
     ("4000", "Sales Revenue", "INCOME"),

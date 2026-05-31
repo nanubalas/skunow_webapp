@@ -623,11 +623,11 @@ def receive_po(request, po_id):
                     except Exception:
                         pass
 
-                any_received = False
-                total_cost = Decimal("0.00")
+                # Pass 1: validate + collect received lines and the goods total.
+                received_lines = []
+                goods_total = Decimal("0.00")
                 for sl in shipment.lines.select_related("po_line", "po_line__product"):
-                    key = f"recv_{sl.id}"
-                    qty_raw = (request.POST.get(key) or "").strip()
+                    qty_raw = (request.POST.get(f"recv_{sl.id}") or "").strip()
                     if not qty_raw:
                         continue
                     try:
@@ -636,14 +636,10 @@ def receive_po(request, po_id):
                         raise ValueError(f"Invalid quantity '{qty_raw}' for {sl.po_line.product.sku}.")
                     if qty <= 0:
                         continue
-
                     if qty > sl.open_qty:
                         raise ValueError(
                             f"Cannot receive more than open qty for {sl.po_line.product.sku}."
                         )
-
-                    lot_code = (request.POST.get(f"lot_{sl.id}") or "").strip() or None
-                    serial = (request.POST.get(f"serial_{sl.id}") or "").strip() or None
                     expiry_raw = (request.POST.get(f"expiry_{sl.id}") or "").strip()
                     expiry = None
                     if expiry_raw:
@@ -651,18 +647,34 @@ def receive_po(request, po_id):
                             expiry = timezone.datetime.fromisoformat(expiry_raw).date()
                         except Exception:
                             expiry = None
+                    received_lines.append({
+                        "sl": sl, "qty": qty,
+                        "lot_code": (request.POST.get(f"lot_{sl.id}") or "").strip() or None,
+                        "serial": (request.POST.get(f"serial_{sl.id}") or "").strip() or None,
+                        "expiry": expiry,
+                    })
+                    goods_total += qty * sl.po_line.unit_cost
+
+                if not received_lines:
+                    # Nothing actually received: abort the whole transaction.
+                    raise ValueError("Nothing received.")
+
+                # Landed costs apportion across received value, raising unit cost.
+                landed_total = sum((lc.amount for lc in receipt.landed_costs.all()), Decimal("0.00"))
+                ratio = (landed_total / goods_total) if goods_total > 0 else Decimal("0.00")
+
+                # Pass 2: create GRN lines, apply costed movements.
+                for item in received_lines:
+                    sl = item["sl"]
+                    qty = item["qty"]
+                    base_cost = sl.po_line.unit_cost
+                    landed_unit_cost = (base_cost * (Decimal("1") + ratio)).quantize(Decimal("0.0001"))
 
                     GoodsReceiptLine.objects.create(
-                        receipt=receipt,
-                        po_line=sl.po_line,
-                        product=sl.po_line.product,
-                        qty_received=qty,
-                        unit_cost=sl.po_line.unit_cost,
-                        lot_code=lot_code,
-                        serial_number=serial,
-                        expiry_date=expiry,
+                        receipt=receipt, po_line=sl.po_line, product=sl.po_line.product,
+                        qty_received=qty, unit_cost=base_cost,
+                        lot_code=item["lot_code"], serial_number=item["serial"], expiry_date=item["expiry"],
                     )
-
                     apply_movement(
                         tenant=tenant,
                         product=sl.po_line.product,
@@ -672,27 +684,18 @@ def receive_po(request, po_id):
                         ref_type="GRN",
                         ref_id=receipt.grn_number,
                         notes=f"Receipt against PO {po.po_number}",
-                        lot_code=lot_code,
-                        serial_number=serial,
-                        expiry_date=expiry,
-                        unit_cost=sl.po_line.unit_cost,
+                        lot_code=item["lot_code"], serial_number=item["serial"], expiry_date=item["expiry"],
+                        unit_cost=landed_unit_cost,
                     )
-                    total_cost += qty * sl.po_line.unit_cost
-
-                    # Update received quantities
                     sl.received_qty += qty
                     sl.save(update_fields=["received_qty"])
                     pol = sl.po_line
                     pol.received_qty += qty
                     pol.save(update_fields=["received_qty"])
-                    any_received = True
 
-                if not any_received:
-                    # Nothing actually received: abort the whole transaction.
-                    raise ValueError("Nothing received.")
-
-                # Capitalize received stock into the GL: DR Inventory / CR GRNI.
-                post_inventory_receipt(tenant, total_cost, receipt.grn_number, user=request.user, entry_date=received_at.date())
+                # Capitalize received stock: DR Inventory (goods+landed) / CR GRNI / CR Accruals.
+                post_inventory_receipt(tenant, goods_total, receipt.grn_number, user=request.user,
+                                       entry_date=received_at.date(), landed_value=landed_total)
 
                 # Update PO status
                 if all((l.open_qty == Decimal("0.00") for l in po.lines.all())):

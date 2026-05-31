@@ -10,8 +10,11 @@ from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
 
+from django.db.models import F, Sum
+
 from core.models import (
     GLAccount, JournalLine, CustomerInvoice, SupplierInvoice, InventoryBalance,
+    InventoryCostLayer, Product,
 )
 
 DEBIT_NORMAL = {GLAccount.Type.ASSET, GLAccount.Type.EXPENSE}
@@ -187,9 +190,20 @@ def stock_valuation(tenant):
         p = b.product
         by_product.setdefault(p, ZERO)
         by_product[p] += (b.on_hand or ZERO)
+    # FIFO products are valued from remaining layers; others at average cost.
+    fifo_value = {
+        row["product"]: row["v"]
+        for row in (InventoryCostLayer.objects
+                    .filter(tenant=tenant, qty_remaining__gt=0)
+                    .values("product")
+                    .annotate(v=Sum(F("qty_remaining") * F("unit_cost"))))
+    }
     for product, qty in by_product.items():
         avg = product.average_cost or ZERO
-        value = (qty * avg).quantize(Decimal("0.01"))
+        if product.cost_method == Product.CostMethod.FIFO:
+            value = (fifo_value.get(product.id, ZERO)).quantize(Decimal("0.01"))
+        else:
+            value = (qty * avg).quantize(Decimal("0.01"))
         total += value
         rows.append({"product": product, "qty": qty, "avg_cost": avg, "value": value})
     rows.sort(key=lambda r: r["product"].sku)

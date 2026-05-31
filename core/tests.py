@@ -303,6 +303,73 @@ class CostingTests(TestCase):
         self.assertEqual(je.total_debit, Decimal("12.00"))  # 4 x 3.00
 
 
+class FifoCostingTests(TestCase):
+    def setUp(self):
+        from core.models import Location
+        self.tenant = Tenant.objects.create(name="FIFO Co")
+        self.product = Product.objects.create(tenant=self.tenant, sku="SKU-F", name="P", cost_method=Product.CostMethod.FIFO)
+        self.loc = Location.objects.create(tenant=self.tenant, name="WH")
+
+    def test_fifo_consumes_oldest_layers_first(self):
+        from core.services.inventory import apply_movement
+        from core.services import reports
+
+        # Layer 1: 10 @ 2.00, Layer 2: 10 @ 5.00
+        apply_movement(tenant=self.tenant, product=self.product, location=self.loc,
+                       movement_type="RECEIVE", qty_delta=Decimal("10"), ref_type="T", ref_id="1", unit_cost=Decimal("2.00"))
+        apply_movement(tenant=self.tenant, product=self.product, location=self.loc,
+                       movement_type="RECEIVE", qty_delta=Decimal("10"), ref_type="T", ref_id="2", unit_cost=Decimal("5.00"))
+
+        # Sell 12: 10 @ 2.00 + 2 @ 5.00 = 30.00 COGS (NOT average 3.50*12=42).
+        sale = apply_movement(tenant=self.tenant, product=self.product, location=self.loc,
+                              movement_type="SALE", qty_delta=Decimal("-12"), ref_type="T", ref_id="3")
+        self.assertEqual(sale.value, Decimal("-30.00"))
+
+        # Remaining 8 @ 5.00 = 40.00 on the valuation report.
+        val = reports.stock_valuation(self.tenant)
+        self.assertEqual(val["total"], Decimal("40.00"))
+
+
+class LandedCostTests(TestCase):
+    def setUp(self):
+        from core.models import Location
+        self.tenant = Tenant.objects.create(name="Landed Co")
+        self.supplier = Supplier.objects.create(tenant=self.tenant, name="S")
+        self.product = Product.objects.create(tenant=self.tenant, sku="SKU-L", name="P")
+        self.loc = Location.objects.create(tenant=self.tenant, name="WH")
+        self.po = PurchaseOrder.objects.create(tenant=self.tenant, po_number="PO-L", supplier=self.supplier, status=PurchaseOrder.Status.SUBMITTED)
+        self.pol = PurchaseOrderLine.objects.create(po=self.po, product=self.product, ordered_qty=Decimal("10"), unit_cost=Decimal("10.00"))
+        self.shipment = Shipment.objects.create(tenant=self.tenant, po=self.po, from_supplier=self.supplier, destination=self.loc)
+        self.sl = ShipmentLine.objects.create(shipment=self.shipment, po_line=self.pol, expected_qty=Decimal("10"))
+        self.user = User.objects.create_user("wh2", password="pw")
+        self.user.groups.add(Group.objects.get_or_create(name="Warehouse")[0])
+        UserProfile.objects.create(user=self.user, tenant=self.tenant)
+        self.client.login(username="wh2", password="pw")
+
+    def test_landed_cost_capitalized_and_balanced(self):
+        from core.models import JournalEntry, GLAccount
+        from core.services import reports
+
+        # Receive 10 @ 10.00 goods (100) + 20.00 freight.
+        resp = self.client.post(f"/po/{self.po.id}/receive/", {
+            "grn_number": "GRN-L",
+            f"recv_{self.sl.id}": "10",
+            "landed_cost_name": "Freight",
+            "landed_cost_amount": "20.00",
+        })
+        self.assertEqual(resp.status_code, 302)
+
+        # Inventory capitalized at 120 (100 goods + 20 landed); journal balances.
+        je = JournalEntry.objects.get(tenant=self.tenant, ref_type="GRN")
+        self.assertEqual(je.total_debit, je.total_credit)
+        self.assertEqual(je.total_debit, Decimal("120.00"))
+
+        # Average cost now 12.00 -> valuation 120.
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.average_cost, Decimal("12.0000"))
+        self.assertEqual(reports.stock_valuation(self.tenant)["total"], Decimal("120.00"))
+
+
 class VatReturnTests(TestCase):
     def setUp(self):
         from datetime import date
