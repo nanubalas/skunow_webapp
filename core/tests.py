@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.models import User, Group
-from django.test import TestCase
+from django.test import TestCase, Client
 
 from core.models import (
     Tenant, Location, Supplier, Product, PurchaseOrder, PurchaseOrderLine,
@@ -250,6 +250,47 @@ class RoleDashboardTests(TestCase):
         self.client.login(username="salesuser", password="pw")
         resp = self.client.get("/")
         self.assertEqual(resp.url, "/reports/")
+
+
+class PerOrgEnforcementTests(TestCase):
+    """A multi-org user's module access must follow their ACTIVE org's role."""
+    def setUp(self):
+        from core.models import OrgMembership
+        self.org_a = Tenant.objects.create(name="Org A")
+        self.org_b = Tenant.objects.create(name="Org B")
+        self.user = User.objects.create_user("multi", password="pw")
+        OrgMembership.objects.create(user=self.user, tenant=self.org_a, role="SALES", is_default=True)
+        OrgMembership.objects.create(user=self.user, tenant=self.org_b, role="FINANCE")
+        self.client.login(username="multi", password="pw")
+
+    def _activate(self, tenant):
+        s = self.client.session
+        s["active_tenant_id"] = tenant.id
+        s.save()
+
+    def test_sales_org_blocked_from_finance_module(self):
+        self._activate(self.org_a)  # SALES here
+        self.assertEqual(self.client.get("/invoices/").status_code, 403)  # supplier invoices = finance/admin
+
+    def test_finance_org_allowed_finance_module(self):
+        self._activate(self.org_b)  # FINANCE here
+        self.assertEqual(self.client.get("/invoices/").status_code, 200)
+
+    def test_sales_org_allowed_sales_module(self):
+        self._activate(self.org_a)
+        self.assertEqual(self.client.get("/sales-orders/").status_code, 200)
+
+    def test_finance_org_blocked_from_sales_only_module(self):
+        self._activate(self.org_b)  # FINANCE -> no Sales group
+        self.assertEqual(self.client.get("/sales-orders/").status_code, 403)
+
+    def test_group_only_user_still_enforced(self):
+        # Legacy user with a Django group but no membership keeps working.
+        u = User.objects.create_user("legacy", password="pw")
+        u.groups.add(Group.objects.get_or_create(name="Finance")[0])
+        c = Client()
+        c.login(username="legacy", password="pw")
+        self.assertEqual(c.get("/invoices/").status_code, 200)
 
 
 class PaymentsTests(TestCase):
