@@ -71,32 +71,43 @@ def apply_movement(*, tenant, product, location, movement_type, qty_delta, ref_t
     # ----- Valuation -----
     prior_avg = product.average_cost or Decimal("0.0000")
     is_fifo = product.cost_method == Product.CostMethod.FIFO
+    is_standard = product.cost_method == Product.CostMethod.STANDARD
 
     if qty_delta > 0:
-        # Inbound. Cost basis = explicit unit_cost, else current average.
-        cost_in = Decimal(unit_cost) if unit_cost is not None else prior_avg
-
-        # Maintain moving average for all methods (used for display + AVERAGE).
-        if unit_cost is not None:
-            new_qty = prior_qty + qty_delta
-            if new_qty > 0:
-                new_avg = ((prior_qty * prior_avg) + (qty_delta * cost_in)) / new_qty
-                product.average_cost = new_avg.quantize(COST_DP, rounding=ROUND_HALF_UP)
+        if is_standard:
+            # Inventory is always carried at standard cost; the actual purchase
+            # cost (passed via unit_cost) becomes a variance handled by the GL.
+            std = product.standard_cost or Decimal("0.0000")
+            if product.average_cost != std:
+                product.average_cost = std  # keep display/valuation consistent
                 product.save(update_fields=["average_cost"])
-
-        # FIFO products also get a cost layer.
-        if is_fifo:
-            InventoryCostLayer.objects.create(
-                tenant=tenant, product=product,
-                qty_received=qty_delta, qty_remaining=qty_delta,
-                unit_cost=cost_in, ref_type=ref_type, ref_id=str(ref_id),
-            )
-        move_unit_cost = cost_in
+            move_unit_cost = std
+        else:
+            # Inbound cost basis = explicit unit_cost, else current average.
+            cost_in = Decimal(unit_cost) if unit_cost is not None else prior_avg
+            # Maintain moving average (used for display + AVERAGE method).
+            if unit_cost is not None:
+                new_qty = prior_qty + qty_delta
+                if new_qty > 0:
+                    new_avg = ((prior_qty * prior_avg) + (qty_delta * cost_in)) / new_qty
+                    product.average_cost = new_avg.quantize(COST_DP, rounding=ROUND_HALF_UP)
+                    product.save(update_fields=["average_cost"])
+            # FIFO products also get a cost layer.
+            if is_fifo:
+                InventoryCostLayer.objects.create(
+                    tenant=tenant, product=product,
+                    qty_received=qty_delta, qty_remaining=qty_delta,
+                    unit_cost=cost_in, ref_type=ref_type, ref_id=str(ref_id),
+                )
+            move_unit_cost = cost_in
         value = (qty_delta * move_unit_cost).quantize(CENTS, rounding=ROUND_HALF_UP)
     else:
         # Outbound.
         out_qty = -qty_delta
-        if is_fifo:
+        if is_standard:
+            move_unit_cost = product.standard_cost or prior_avg
+            value = (qty_delta * move_unit_cost).quantize(CENTS, rounding=ROUND_HALF_UP)
+        elif is_fifo:
             cost = _consume_fifo_layers(tenant, product, out_qty, prior_avg)
             value = (-cost).quantize(CENTS, rounding=ROUND_HALF_UP)
             move_unit_cost = (cost / out_qty).quantize(COST_DP, rounding=ROUND_HALF_UP) if out_qty else prior_avg

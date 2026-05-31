@@ -664,6 +664,7 @@ def receive_po(request, po_id):
                 ratio = (landed_total / goods_total) if goods_total > 0 else Decimal("0.00")
 
                 # Pass 2: create GRN lines, apply costed movements.
+                inventory_value = Decimal("0.00")
                 for item in received_lines:
                     sl = item["sl"]
                     qty = item["qty"]
@@ -675,7 +676,7 @@ def receive_po(request, po_id):
                         qty_received=qty, unit_cost=base_cost,
                         lot_code=item["lot_code"], serial_number=item["serial"], expiry_date=item["expiry"],
                     )
-                    apply_movement(
+                    movement = apply_movement(
                         tenant=tenant,
                         product=sl.po_line.product,
                         location=dest_location,
@@ -687,15 +688,19 @@ def receive_po(request, po_id):
                         lot_code=item["lot_code"], serial_number=item["serial"], expiry_date=item["expiry"],
                         unit_cost=landed_unit_cost,
                     )
+                    # Actual capitalized value (standard products differ from cost).
+                    inventory_value += movement.value or Decimal("0.00")
                     sl.received_qty += qty
                     sl.save(update_fields=["received_qty"])
                     pol = sl.po_line
                     pol.received_qty += qty
                     pol.save(update_fields=["received_qty"])
 
-                # Capitalize received stock: DR Inventory (goods+landed) / CR GRNI / CR Accruals.
+                # Capitalize: DR Inventory (at cost basis) / CR GRNI (goods) / CR
+                # Accruals (landed) / +/- Purchase Price Variance (standard costing).
                 post_inventory_receipt(tenant, goods_total, receipt.grn_number, user=request.user,
-                                       entry_date=received_at.date(), landed_value=landed_total)
+                                       entry_date=received_at.date(), landed_value=landed_total,
+                                       inventory_value=inventory_value)
 
                 # Update PO status
                 if all((l.open_qty == Decimal("0.00") for l in po.lines.all())):

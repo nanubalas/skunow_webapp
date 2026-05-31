@@ -370,6 +370,62 @@ class LandedCostTests(TestCase):
         self.assertEqual(reports.stock_valuation(self.tenant)["total"], Decimal("120.00"))
 
 
+class StandardCostingTests(TestCase):
+    def setUp(self):
+        from core.models import Location
+        self.tenant = Tenant.objects.create(name="Std Co")
+        # Standard cost 10.00, but we'll buy at 12.00 -> unfavourable variance.
+        self.product = Product.objects.create(
+            tenant=self.tenant, sku="SKU-S", name="P",
+            cost_method=Product.CostMethod.STANDARD, standard_cost=Decimal("10.00"),
+        )
+        self.loc = Location.objects.create(tenant=self.tenant, name="WH")
+        self.supplier = Supplier.objects.create(tenant=self.tenant, name="S")
+        self.po = PurchaseOrder.objects.create(tenant=self.tenant, po_number="PO-S", supplier=self.supplier, status=PurchaseOrder.Status.SUBMITTED)
+        self.pol = PurchaseOrderLine.objects.create(po=self.po, product=self.product, ordered_qty=Decimal("10"), unit_cost=Decimal("12.00"))
+        self.shipment = Shipment.objects.create(tenant=self.tenant, po=self.po, from_supplier=self.supplier, destination=self.loc)
+        self.sl = ShipmentLine.objects.create(shipment=self.shipment, po_line=self.pol, expected_qty=Decimal("10"))
+        self.user = User.objects.create_user("wh3", password="pw")
+        self.user.groups.add(Group.objects.get_or_create(name="Warehouse")[0])
+        UserProfile.objects.create(user=self.user, tenant=self.tenant)
+        self.client.login(username="wh3", password="pw")
+
+    def test_receipt_values_at_standard_and_books_variance(self):
+        from core.models import JournalEntry, GLAccount
+        from core.services import reports
+
+        # Receive 10 @ actual 12.00; standard is 10.00.
+        resp = self.client.post(f"/po/{self.po.id}/receive/", {
+            "grn_number": "GRN-S", f"recv_{self.sl.id}": "10",
+        })
+        self.assertEqual(resp.status_code, 302)
+
+        # Inventory carried at standard: 10 x 10.00 = 100.00
+        self.assertEqual(reports.stock_valuation(self.tenant)["total"], Decimal("100.00"))
+
+        je = JournalEntry.objects.get(tenant=self.tenant, ref_type="GRN")
+        self.assertEqual(je.total_debit, je.total_credit)            # balanced
+        self.assertEqual(je.total_credit, Decimal("120.00"))         # GRNI at actual 120
+        # Variance = 120 actual - 100 standard = 20 unfavourable (DR PPV).
+        ppv = GLAccount.objects.get(tenant=self.tenant, code="5100")
+        ppv_line = je.lines.get(account=ppv)
+        self.assertEqual(ppv_line.debit, Decimal("20.00"))
+
+    def test_sale_cogs_at_standard(self):
+        from core.services.inventory import apply_movement
+        from core.views import _post_sales_order
+        from core.models import SalesOrder, SalesOrderLine, JournalEntry
+
+        apply_movement(tenant=self.tenant, product=self.product, location=self.loc,
+                       movement_type="RECEIVE", qty_delta=Decimal("10"), ref_type="T", ref_id="1", unit_cost=Decimal("12.00"))
+        order = SalesOrder.objects.create(tenant=self.tenant, order_number="SO-S1", ship_from_location=self.loc)
+        SalesOrderLine.objects.create(order=order, product=self.product, qty=Decimal("4"), unit_price=Decimal("30.00"))
+        _post_sales_order(order)
+
+        je = JournalEntry.objects.get(tenant=self.tenant, ref_type="COGS")
+        self.assertEqual(je.total_debit, Decimal("40.00"))  # 4 x standard 10.00
+
+
 class VatReturnTests(TestCase):
     def setUp(self):
         from datetime import date

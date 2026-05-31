@@ -15,6 +15,7 @@ DEFAULT_ACCOUNT_CODES = {
     "vat_input": "1300",
     "sales": "4000",
     "cogs": "5000",
+    "ppv": "5100",
 }
 
 def _acc(tenant: Tenant, key: str) -> GLAccount:
@@ -149,27 +150,41 @@ def post_payment(payment, user=None) -> JournalEntry:
 
 
 @transaction.atomic
-def post_inventory_receipt(tenant, value, ref_id, user=None, entry_date=None, landed_value=Decimal("0.00")):
+def post_inventory_receipt(tenant, value, ref_id, user=None, entry_date=None,
+                           landed_value=Decimal("0.00"), inventory_value=None):
     """Capitalize received stock.
 
-    DR Inventory (goods + landed) / CR GRNI (goods) / CR Accruals (landed).
-    `value` is the goods cost; `landed_value` is freight/duty accrued separately.
+    CR GRNI (goods, = supplier liability) + CR Accruals (landed). DR Inventory
+    at `inventory_value` (defaults to goods + landed for actual-cost methods).
+    Under standard costing the inventory value differs from goods + landed, so
+    the difference is booked to Purchase Price Variance to keep the entry
+    balanced (DR PPV if unfavourable, CR PPV if favourable).
     """
     value = Decimal(value)
     landed_value = Decimal(landed_value or "0.00")
-    total = value + landed_value
-    if total <= Decimal("0.00"):
+    goods_and_landed = value + landed_value
+    inv = Decimal(inventory_value) if inventory_value is not None else goods_and_landed
+    if goods_and_landed <= Decimal("0.00") and inv <= Decimal("0.00"):
         return None
+
     je = JournalEntry.objects.create(
         tenant=tenant, entry_date=entry_date or timezone.now().date(),
         ref_type="GRN", ref_id=str(ref_id), memo=f"Goods received {ref_id}",
         posted_by=user, posted_at=timezone.now(),
     )
-    JournalLine.objects.create(entry=je, account=_acc(tenant, "inventory"), description="Inventory", debit=total, credit=Decimal("0.00"))
+    if inv > Decimal("0.00"):
+        JournalLine.objects.create(entry=je, account=_acc(tenant, "inventory"), description="Inventory", debit=inv, credit=Decimal("0.00"))
     if value > Decimal("0.00"):
         JournalLine.objects.create(entry=je, account=_acc(tenant, "grni"), description="GRNI", debit=Decimal("0.00"), credit=value)
     if landed_value > Decimal("0.00"):
         JournalLine.objects.create(entry=je, account=_acc(tenant, "accruals"), description="Landed cost accrual", debit=Decimal("0.00"), credit=landed_value)
+
+    # Purchase price variance balances inventory (at standard) vs actual cost.
+    variance = goods_and_landed - inv  # >0 unfavourable (actual > standard)
+    if variance > Decimal("0.00"):
+        JournalLine.objects.create(entry=je, account=_acc(tenant, "ppv"), description="Purchase price variance", debit=variance, credit=Decimal("0.00"))
+    elif variance < Decimal("0.00"):
+        JournalLine.objects.create(entry=je, account=_acc(tenant, "ppv"), description="Purchase price variance", debit=Decimal("0.00"), credit=-variance)
     return je
 
 
