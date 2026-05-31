@@ -21,6 +21,7 @@ DEFAULT_ACCOUNTS = [
     ("1300", "VAT Input", "ASSET"),
     ("4000", "Sales Revenue", "INCOME"),
     ("5000", "Cost of Goods Sold", "EXPENSE"),
+    ("5100", "Purchase Price Variance", "EXPENSE"),
 ]
 
 @receiver(post_save, sender=Tenant)
