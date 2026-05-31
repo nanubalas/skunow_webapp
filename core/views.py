@@ -802,7 +802,7 @@ def receive_po(request, po_id):
     })
 
 @login_required
-@role_required([ROLE_ADMIN, ROLE_WAREHOUSE, ROLE_FINANCE, ROLE_READONLY])
+@role_required([ROLE_ADMIN, ROLE_WAREHOUSE, ROLE_PROCUREMENT, ROLE_FINANCE, ROLE_READONLY])
 def inventory_list(request):
     tenant = _get_default_tenant(request)
     balances = (
@@ -843,7 +843,7 @@ def reconcile(request):
     return render(request, "reconcile.html", {"tenant": tenant, "rows": rows})
 
 @login_required
-@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_READONLY])
+@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE, ROLE_SALES, ROLE_READONLY])
 
 def product_list(request):
     tenant = _get_default_tenant(request)
@@ -926,7 +926,7 @@ def product_delete(request, product_id):
     })
 
 @login_required
-@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_READONLY])
+@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_FINANCE, ROLE_READONLY])
 
 def supplier_list(request):
     tenant = _get_default_tenant(request)
@@ -2097,7 +2097,7 @@ def report_aged_receivables(request):
     })
 
 
-@role_required([ROLE_FINANCE, ROLE_ADMIN, ROLE_WAREHOUSE, ROLE_READONLY], write_groups=[ROLE_FINANCE, ROLE_ADMIN])
+@role_required([ROLE_FINANCE, ROLE_ADMIN, ROLE_WAREHOUSE, ROLE_PROCUREMENT, ROLE_READONLY], write_groups=[ROLE_FINANCE, ROLE_ADMIN])
 def report_stock_valuation(request):
     tenant = _get_default_tenant(request)
     data = reports_service.stock_valuation(tenant)
