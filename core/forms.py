@@ -310,7 +310,9 @@ ReturnLineFormSet = inlineformset_factory(
 class TaxCodeForm(TenantModelForm):
     class Meta:
         model = TaxCode
-        fields = ["code", "name", "rate", "is_active"]
+        fields = ["code", "name", "rate", "kind", "is_active"]
+        help_texts = {"rate": "Decimal fraction, e.g. 0.20 for 20%.",
+                      "kind": "VAT treatment - drives how amounts appear on the VAT return."}
 
 class CustomerForm(TenantModelForm):
     class Meta:

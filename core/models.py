@@ -861,11 +861,27 @@ class ReturnLine(models.Model):
 # ============================
 
 class TaxCode(models.Model):
+    class Kind(models.TextChoices):
+        STANDARD = "STANDARD", "Standard rate"
+        REDUCED = "REDUCED", "Reduced rate"
+        ZERO = "ZERO", "Zero rate"
+        EXEMPT = "EXEMPT", "Exempt"
+        OUTSIDE_SCOPE = "OUTSIDE", "Outside the scope of VAT"
+
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     code = models.CharField(max_length=20)
     name = models.CharField(max_length=100)
     rate = models.DecimalField(max_digits=6, decimal_places=4, default=Decimal("0.0000"))  # e.g. 0.2000 for 20%
+    # VAT treatment drives the VAT return: outside-scope is excluded from the
+    # net sales/purchases boxes; zero/exempt are included at a 0 rate.
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.STANDARD)
     is_active = models.BooleanField(default=True)
+
+    @property
+    def in_vat_boxes(self):
+        """Whether amounts with this code count toward boxes 6/7 (net sales/
+        purchases). Everything except outside-the-scope supplies is included."""
+        return self.kind != self.Kind.OUTSIDE_SCOPE
 
     class Meta:
         unique_together = ("tenant", "code")
