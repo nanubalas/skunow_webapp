@@ -588,6 +588,84 @@ def invite_user(request):
 
 
 # ============================
+# Users & Roles management (admin)
+# ============================
+
+def _active_admin_count(tenant, exclude_user_id=None):
+    qs = OrgMembership.objects.filter(tenant=tenant, role=roles_mod.ADMIN, user__is_active=True)
+    if exclude_user_id:
+        qs = qs.exclude(user_id=exclude_user_id)
+    return qs.count()
+
+
+@role_required([ROLE_ADMIN], [ROLE_ADMIN])
+def members_list(request):
+    tenant = _get_default_tenant(request)
+    members = OrgMembership.objects.filter(tenant=tenant).select_related("user").order_by("user__username")
+    return render(request, "team/members.html", {
+        "tenant": tenant, "members": members, "roles": roles_mod.ROLE_CHOICES,
+    })
+
+
+@role_required([ROLE_ADMIN], [ROLE_ADMIN])
+@transaction.atomic
+def member_change_role(request, membership_id):
+    tenant = _get_default_tenant(request)
+    m = get_object_or_404(OrgMembership, id=membership_id, tenant=tenant)
+    if request.method == "POST":
+        new_role = request.POST.get("role")
+        if new_role not in dict(roles_mod.ROLE_CHOICES):
+            messages.error(request, "Invalid role.")
+        elif m.role == roles_mod.ADMIN and new_role != roles_mod.ADMIN and _active_admin_count(tenant, exclude_user_id=m.user_id) == 0:
+            messages.error(request, "You can't change the last Owner/Admin's role.")
+        elif new_role != m.role:
+            old = m.role
+            m.role = new_role
+            m.save()  # signal re-syncs Django groups
+            log_audit(action="ROLE_CHANGED", request=request, user=request.user, tenant=tenant,
+                      detail=f"{m.user.username}: {old} -> {new_role}")
+            messages.success(request, f"{m.user.username}'s role changed to {dict(roles_mod.ROLE_CHOICES)[new_role]}.")
+    return redirect("members_list")
+
+
+@role_required([ROLE_ADMIN], [ROLE_ADMIN])
+@transaction.atomic
+def member_toggle_active(request, membership_id):
+    tenant = _get_default_tenant(request)
+    m = get_object_or_404(OrgMembership, id=membership_id, tenant=tenant)
+    if request.method == "POST":
+        if m.user_id == request.user.id:
+            messages.error(request, "You can't deactivate your own account.")
+        elif m.user.is_active and m.role == roles_mod.ADMIN and _active_admin_count(tenant, exclude_user_id=m.user_id) == 0:
+            messages.error(request, "You can't deactivate the last Owner/Admin.")
+        else:
+            m.user.is_active = not m.user.is_active
+            m.user.save(update_fields=["is_active"])
+            action = "USER_REACTIVATED" if m.user.is_active else "USER_DEACTIVATED"
+            log_audit(action=action, request=request, user=request.user, tenant=tenant, detail=m.user.username)
+            messages.success(request, f"{m.user.username} {'reactivated' if m.user.is_active else 'deactivated'}.")
+    return redirect("members_list")
+
+
+@role_required([ROLE_ADMIN], [ROLE_ADMIN])
+@transaction.atomic
+def member_remove(request, membership_id):
+    tenant = _get_default_tenant(request)
+    m = get_object_or_404(OrgMembership, id=membership_id, tenant=tenant)
+    if request.method == "POST":
+        if m.user_id == request.user.id:
+            messages.error(request, "You can't remove yourself from the organisation.")
+        elif m.role == roles_mod.ADMIN and _active_admin_count(tenant, exclude_user_id=m.user_id) == 0:
+            messages.error(request, "You can't remove the last Owner/Admin.")
+        else:
+            uname = m.user.username
+            m.delete()
+            log_audit(action="USER_REMOVED", request=request, user=request.user, tenant=tenant, detail=uname)
+            messages.success(request, f"{uname} removed from {tenant.name}.")
+    return redirect("members_list")
+
+
+# ============================
 # CSV import (products / customers / suppliers)
 # ============================
 
