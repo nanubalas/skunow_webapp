@@ -40,7 +40,7 @@ from core.forms import (
     TaxCodeForm, CustomerForm,
     CustomerInvoiceForm, CustomerInvoiceLineFormSet,
     GLAccountForm, ReceiptForm, SupplierPaymentForm, AccessRequestForm,
-    NewOrganisationForm
+    NewOrganisationForm, InviteUserForm
 )
 from core.services.inventory import apply_movement, reserve_stock, release_reservations
 from core.services.bom import explode_product
@@ -481,7 +481,7 @@ def _onboarding_steps(tenant):
          "desc": "A warehouse, store or office.", "url": "/locations/new/",
          "done": Location.objects.filter(tenant=tenant).exists()},
         {"key": "team", "label": "Invite your team", "icon": "people",
-         "desc": "Add users and assign roles.", "url": "/access-requests/",
+         "desc": "Add users and assign roles.", "url": "/team/invite/",
          "done": OrgMembership.objects.filter(tenant=tenant).count() > 1},
         {"key": "products", "label": "Add products", "icon": "box-seam",
          "desc": "Create or import your catalogue.", "url": "/products/",
@@ -532,6 +532,41 @@ def new_organisation(request):
         messages.success(request, f"Organisation '{tenant.name}' created. Let's finish setting it up.")
         return redirect("onboarding")
     return render(request, "onboarding/new_organisation.html", {"form": form})
+
+
+@role_required([ROLE_ADMIN], [ROLE_ADMIN])
+@transaction.atomic
+def invite_user(request):
+    """Admin invites a teammate directly: creates the account + role membership
+    in the active org and emails them a temporary password."""
+    from django.contrib.auth.models import User
+    tenant = _get_default_tenant(request)
+    form = InviteUserForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        email = form.cleaned_data["email"]
+        name = form.cleaned_data["name"]
+        role = form.cleaned_data["role"]
+        username = _unique_username(email.split("@")[0] if email else name)
+        temp_password = get_random_string(10)
+        parts = name.split(" ", 1)
+        user = User.objects.create_user(
+            username=username, email=email,
+            first_name=parts[0], last_name=(parts[1] if len(parts) > 1 else ""),
+            password=temp_password,
+        )
+        UserProfile.objects.update_or_create(user=user, defaults={"tenant": tenant})
+        OrgMembership.objects.get_or_create(user=user, tenant=tenant, defaults={"role": role, "is_default": True})
+        from core import notify
+        notify.notify_credentials(email, name, username, temp_password, request)
+        log_audit(action="USER_INVITED", request=request, user=request.user, tenant=tenant,
+                  detail=f"{email} -> {username} ({role})")
+        messages.success(
+            request,
+            f"Invited {name}: username '{username}', temporary password '{temp_password}' "
+            f"({dict(roles_mod.ROLE_CHOICES)[role]}). We've emailed them these details.",
+        )
+        return redirect("invite_user")
+    return render(request, "team/invite.html", {"tenant": tenant, "form": form})
 
 
 # ============================
@@ -1925,7 +1960,8 @@ def invoice_create(request):
             return redirect("invoice_detail", invoice_id=inv.id)
     else:
         form = SupplierInvoiceForm(instance=inv)
-        formset = SupplierInvoiceLineFormSet(instance=inv)
+        line_initial = [{"tax_code": tenant.default_tax_code}] if tenant.default_tax_code_id else None
+        formset = SupplierInvoiceLineFormSet(instance=inv, initial=line_initial)
 
     return render(request, "finance/invoice_form.html", {"tenant": tenant, "form": form, "formset": formset})
 

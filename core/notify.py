@@ -70,6 +70,22 @@ def notify_applicant_approved(req, username, temp_password, request=None):
     send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [req.email], fail_silently=True)
 
 
+def notify_credentials(email, name, username, temp_password, request=None):
+    """Email new account credentials (used by admin invites)."""
+    if not email:
+        return
+    subject = "[SwifPro BI] You've been invited"
+    body = (
+        f"Hi {name},\n\n"
+        f"An account has been created for you on SwifPro BI.\n\n"
+        f"Username:           {username}\n"
+        f"Temporary password: {temp_password}\n\n"
+        f"Sign in here: {_login_url(request)}\n"
+        f"Please change your password after your first sign-in.\n"
+    )
+    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=True)
+
+
 def notify_applicant_rejected(req, request=None):
     if not req.email:
         return
