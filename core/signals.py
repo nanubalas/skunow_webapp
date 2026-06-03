@@ -7,9 +7,11 @@ from core.models import Tenant, TaxCode, GLAccount
 from core.audit import log_audit
 
 DEFAULT_TAX_CODES = [
-    ("STD", "Standard rate", Decimal("0.20")),
-    ("ZERO", "Zero rate", Decimal("0.00")),
-    ("EXEMPT", "Exempt", Decimal("0.00")),
+    ("STD", "Standard rate (20%)", Decimal("0.20"), "STANDARD"),
+    ("RED", "Reduced rate (5%)", Decimal("0.05"), "REDUCED"),
+    ("ZERO", "Zero rate (0%)", Decimal("0.00"), "ZERO"),
+    ("EXEMPT", "Exempt", Decimal("0.00"), "EXEMPT"),
+    ("OS", "Outside the scope of VAT", Decimal("0.00"), "OUTSIDE"),
 ]
 
 DEFAULT_ACCOUNTS = [
@@ -42,8 +44,8 @@ def bootstrap_tenant_defaults(sender, instance: Tenant, created: bool, **kwargs)
         return
 
     # Tax codes
-    for code, name, rate in DEFAULT_TAX_CODES:
-        TaxCode.objects.get_or_create(tenant=instance, code=code, defaults={"name": name, "rate": rate})
+    for code, name, rate, kind in DEFAULT_TAX_CODES:
+        TaxCode.objects.get_or_create(tenant=instance, code=code, defaults={"name": name, "rate": rate, "kind": kind})
 
     # GL accounts
     for code, name, acc_type in DEFAULT_ACCOUNTS:

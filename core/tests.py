@@ -850,8 +850,8 @@ class PaymentsTests(TestCase):
         self.assertEqual(self.inv.status, "ISSUED")
         self.assertEqual(self.inv.outstanding, Decimal("140.00"))
 
-    def test_bank_reconciliation_toggles_cleared(self):
-        from core.models import Payment
+    def test_bank_reconciliation_matches_statement_line(self):
+        from core.models import Payment, BankTransaction
         self.client.post("/payments/receipts/new/", {
             "customer": self.customer.id, "payment_date": "2026-05-30",
             "amount": "240.00", "method": "BANK",
@@ -859,7 +859,9 @@ class PaymentsTests(TestCase):
         payment = Payment.objects.get(tenant=self.tenant)
         self.assertFalse(payment.is_reconciled)
 
-        resp = self.client.post("/bank/reconcile/", {"cleared": [str(payment.id)]})
+        # Statement line of the same amount auto-matches to the receipt.
+        BankTransaction.objects.create(tenant=self.tenant, description="FPS CREDIT", amount=Decimal("240.00"))
+        resp = self.client.post("/bank/reconcile/", {"action": "auto"})
         self.assertEqual(resp.status_code, 302)
         payment.refresh_from_db()
         self.assertTrue(payment.is_reconciled)
@@ -1451,3 +1453,37 @@ class CreditNoteTests(TestCase):
         cn = CreditNote.objects.get(tenant=self.tenant, credit_note_number="CN-V1")
         self.assertEqual(cn.status, "POSTED")
         self.assertEqual(cn.total, Decimal("60.00"))
+
+
+class VatTaxCodeTests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership
+        self.tenant = Tenant.objects.create(name="VAT Codes Co")
+        self.admin = User.objects.create_user("vcadmin", password="pw")
+        OrgMembership.objects.create(user=self.admin, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.client.login(username="vcadmin", password="pw")
+
+    def test_all_five_default_codes_with_treatments(self):
+        codes = {c.code: c for c in TaxCode.objects.filter(tenant=self.tenant)}
+        self.assertEqual(codes["STD"].kind, "STANDARD")
+        self.assertEqual(codes["RED"].kind, "REDUCED")
+        self.assertEqual(codes["RED"].rate, Decimal("0.0500"))
+        self.assertEqual(codes["ZERO"].kind, "ZERO")
+        self.assertEqual(codes["EXEMPT"].kind, "EXEMPT")
+        self.assertEqual(codes["OS"].kind, "OUTSIDE")
+
+    def test_in_vat_boxes_excludes_outside_scope(self):
+        codes = {c.code: c for c in TaxCode.objects.filter(tenant=self.tenant)}
+        self.assertTrue(codes["STD"].in_vat_boxes)
+        self.assertTrue(codes["ZERO"].in_vat_boxes)
+        self.assertTrue(codes["EXEMPT"].in_vat_boxes)
+        self.assertFalse(codes["OS"].in_vat_boxes)
+
+    def test_create_tax_code_audited(self):
+        from core.models import AuditLog
+        resp = self.client.post("/tax-codes/new/", {
+            "code": "CUSTOM", "name": "Custom", "rate": "0.10", "kind": "REDUCED", "is_active": "on",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(TaxCode.objects.filter(tenant=self.tenant, code="CUSTOM").exists())
+        self.assertTrue(AuditLog.objects.filter(tenant=self.tenant, action="VAT_RATE_CHANGED").exists())

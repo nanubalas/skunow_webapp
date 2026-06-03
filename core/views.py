@@ -2546,6 +2546,8 @@ def taxcode_create(request):
         obj = form.save(commit=False)
         obj.tenant = tenant
         obj.save()
+        log_audit(action="VAT_RATE_CHANGED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Created tax code {obj.code} ({obj.get_kind_display()} @ {obj.rate})")
         return redirect("taxcode_list")
     return render(request, "tax/taxcode_form.html", {"tenant": tenant, "form": form, "mode": "create"})
 
@@ -2556,6 +2558,8 @@ def taxcode_edit(request, tax_id):
     form = TaxCodeForm(request.POST or None, instance=obj)
     if request.method == "POST" and form.is_valid():
         form.save()
+        log_audit(action="VAT_RATE_CHANGED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Updated tax code {obj.code} ({obj.get_kind_display()} @ {obj.rate})")
         return redirect("taxcode_list")
     return render(request, "tax/taxcode_form.html", {"tenant": tenant, "form": form, "mode": "edit"})
 
