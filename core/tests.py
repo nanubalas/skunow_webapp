@@ -264,7 +264,9 @@ class CompanyProfileTests(TestCase):
         data = {
             "name": "Profile Co", "legal_name": "Profile Co Ltd", "trading_name": "Profile",
             "business_type": "LTD", "company_number": "12345678", "utr_number": "1234567890",
-            "vat_number": "GB123456789", "address_country": "United Kingdom",
+            "vat_number": "GB123456789",
+            "address_line1": "1 High St", "address_city": "Manchester", "address_postcode": "M1 2AB",
+            "address_country": "United Kingdom",
             "billing_same_as_business": "on", "billing_country": "United Kingdom",
             "email": "ops@profile.test", "phone": "+44 20 7946 0000", "website": "https://profile.test",
             "currency_code": "GBP", "country": "United Kingdom", "timezone": "Europe/London",
@@ -301,6 +303,38 @@ class CompanyProfileTests(TestCase):
         resp = self.client.post("/settings/tenant/", self._base_post(vat_registered="on", vat_number=""))
         self.assertContains(resp, "VAT number is required")
 
+    def test_required_fields_enforced(self):
+        # Blank legal name / address must be rejected (re-rendered, not saved).
+        resp = self.client.post("/settings/tenant/", self._base_post(legal_name="", address_line1=""))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.context["form"].is_valid())
+
+
+class TeamInviteTests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership
+        self.tenant = Tenant.objects.create(name="Invite Co")
+        self.admin = User.objects.create_user("invadmin", password="pw")
+        OrgMembership.objects.create(user=self.admin, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.client.login(username="invadmin", password="pw")
+
+    def test_invite_creates_user_and_membership_and_emails(self):
+        from django.core import mail
+        from core.models import OrgMembership
+        from django.contrib.auth.models import User as U
+        resp = self.client.post("/team/invite/", {"name": "Pat Jones", "email": "pat@team.test", "role": "WAREHOUSE"})
+        self.assertEqual(resp.status_code, 302)
+        u = U.objects.get(email="pat@team.test")
+        self.assertTrue(OrgMembership.objects.filter(user=u, tenant=self.tenant, role="WAREHOUSE").exists())
+        self.assertTrue(any("pat@team.test" in m.to for m in mail.outbox))
+
+    def test_invite_requires_admin(self):
+        from core.models import OrgMembership
+        u = User.objects.create_user("notadmin", password="pw")
+        OrgMembership.objects.create(user=u, tenant=self.tenant, role="SALES", is_default=True)
+        c = Client(); c.login(username="notadmin", password="pw")
+        self.assertEqual(c.get("/team/invite/").status_code, 403)
+
 
 class CompanyDefaultsTests(TestCase):
     def setUp(self):
@@ -328,6 +362,12 @@ class CompanyDefaultsTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         inv = CustomerInvoice.objects.get(tenant=self.tenant, invoice_number="INV-D1")
         self.assertEqual(inv.due_date, self.date(2026, 6, 15))  # 1 June + 14 days
+
+    def test_supplier_invoice_line_defaults_tax(self):
+        resp = self.client.get("/invoices/new/")
+        self.assertEqual(resp.status_code, 200)
+        fs = resp.context["formset"]
+        self.assertEqual(fs.forms[0].initial.get("tax_code"), self.tenant.default_tax_code)
 
     def test_financial_year_helper(self):
         from core.services import reports

@@ -41,10 +41,44 @@ class Command(BaseCommand):
                 "po_approval_threshold": Decimal("5000.00"),
             },
         )
-        if not tenant.onboarding_complete:
-            tenant.onboarding_complete = True
-            tenant.save(update_fields=["onboarding_complete"])
-        self.stdout.write(("Created" if created else "Reusing") + f" tenant: {tenant.name}")
+        # Full company profile (idempotent).
+        tenant.legal_name = "SwifPro BI Demo Limited"
+        tenant.trading_name = "SwifPro BI"
+        tenant.business_type = Tenant.BusinessType.LTD
+        tenant.utr_number = "1234567890"
+        tenant.vat_registered = True
+        tenant.vat_number = "GB123456789"
+        tenant.address_line1 = "Unit 4, Innovation Park"
+        tenant.address_line2 = "Charter Street"
+        tenant.address_city = "Manchester"
+        tenant.address_postcode = "M1 2AB"
+        tenant.address_country = "United Kingdom"
+        tenant.billing_same_as_business = True
+        tenant.email = "ops@swifpro-demo.co.uk"
+        tenant.phone = "+44 161 555 0100"
+        tenant.website = "https://swifprobi.com"
+        tenant.invoice_footer = "Thank you for your business. Payment due within terms. SwifPro BI Demo Limited - Reg. 12345678."
+        tenant.country = "United Kingdom"
+        tenant.timezone = "Europe/London"
+        tenant.financial_year_start_month = 4
+        tenant.default_payment_terms_days = 30
+        tenant.onboarding_complete = True
+        std = TaxCode.objects.filter(tenant=tenant, code="STD").first()
+        if std:
+            tenant.default_tax_code = std
+        tenant.save()
+
+        # Company logo (copy the brand asset into media if not already set).
+        if not tenant.logo:
+            import os
+            from django.conf import settings
+            from django.core.files import File
+            src = os.path.join(settings.BASE_DIR, "core", "static", "img", "logo.png")
+            if os.path.exists(src):
+                with open(src, "rb") as fh:
+                    tenant.logo.save("demo-logo.png", File(fh), save=True)
+
+        self.stdout.write(("Created" if created else "Reusing") + f" tenant: {tenant.name} (profile filled)")
 
         # Bind the admin user to this tenant (if present)
         admin = User.objects.filter(username="admin").first()

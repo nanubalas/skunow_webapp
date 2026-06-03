@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Invite a teammate - SwifPro BI{% endblock %}
+
+{% block body %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="mb-3">
+      <h2 class="fw-bold mb-1">Invite a teammate</h2>
+      <p class="text-muted mb-0">Create an account in {{ tenant.name }} and email them a temporary password.</p>
+    </div>
+
+    <div class="card-soft p-4 p-md-5">
+      <form method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>
+            {{ field }}
+            {% for e in field.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary w-100 py-2" type="submit"><i class="bi bi-person-plus me-1"></i> Create &amp; invite</button>
+      </form>
+      <div class="text-muted small text-center mt-3">
+        Prefer to review requests instead? <a href="{% url 'access_request_list' %}" class="text-decoration-none">Access requests</a>.
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.querySelectorAll("form select").forEach(e => e.classList.add("form-select"));
+  document.querySelectorAll("form input").forEach(e => { if(e.type!=="checkbox") e.classList.add("form-control"); });
+</script>
+{% endblock %}

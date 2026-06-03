@@ -114,6 +114,15 @@ class TenantSettingsForm(TenantModelForm):
     currency_code = forms.ChoiceField(choices=CURRENCY_CHOICES)
     financial_year_start_month = forms.TypedChoiceField(choices=MONTHS, coerce=int, label="Financial year starts")
 
+    REQUIRED = ["name", "legal_name", "business_type", "email",
+                "address_line1", "address_city", "address_postcode"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for fname in self.REQUIRED:
+            if fname in self.fields:
+                self.fields[fname].required = True
+
     class Meta:
         model = Tenant
         fields = [
@@ -331,6 +340,15 @@ class GLAccountForm(TenantModelForm):
     class Meta:
         model = GLAccount
         fields = ["code", "name", "type", "is_active"]
+
+
+class InviteUserForm(forms.Form):
+    """Admin invites a teammate directly - creates their account + role."""
+    from core.roles import ROLE_CHOICES as _ROLE_CHOICES
+    name = forms.CharField(max_length=200)
+    email = forms.EmailField()
+    role = forms.ChoiceField(choices=_ROLE_CHOICES)
+    employee_id = forms.CharField(max_length=50, required=False, label="Employee ID")
 
 
 class NewOrganisationForm(forms.ModelForm):
