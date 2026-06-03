@@ -396,6 +396,12 @@
       </div>
     </div>
     {% endfor %}
+    <div class="mb-3">
+      <div class="text-uppercase text-muted mb-2 nav-section-title">Account</div>
+      <div class="list-group list-group-flush">
+        <a href="{% url 'change_password' %}" class="list-group-item list-group-item-action"><i class="bi bi-key"></i> Change password</a>
+      </div>
+    </div>
   </div>
 </div>
 {% endif %}

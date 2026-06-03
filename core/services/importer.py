@@ -93,6 +93,29 @@ def import_suppliers(tenant, rows):
     return _summary(created, updated, errors, len(rows))
 
 
+def export_rows(tenant, kind):
+    """Return (columns, [row-lists]) for a tenant's records in `kind`.
+
+    Mirrors the import column order so an export can be re-imported as-is.
+    """
+    cfg = CONFIG.get(kind)
+    if not cfg:
+        return [], []
+    cols = cfg["columns"]
+    out = []
+    if kind == "products":
+        for p in Product.objects.filter(tenant=tenant).order_by("sku"):
+            barcode = ProductBarcode.objects.filter(tenant=tenant, product=p).values_list("code", flat=True).first()
+            out.append([p.sku, p.name, p.uom, p.cost_method, p.standard_cost, barcode or ""])
+    elif kind == "customers":
+        for c in Customer.objects.filter(tenant=tenant).order_by("name"):
+            out.append([c.name, c.email or "", c.phone or "", c.vat_number or "", c.billing_address or ""])
+    elif kind == "suppliers":
+        for s in Supplier.objects.filter(tenant=tenant).order_by("name"):
+            out.append([s.name, s.email or "", s.phone or "", s.currency_code or "GBP"])
+    return cols, out
+
+
 CONFIG = {
     "products":  {"label": "Products",  "key": "sku",
                   "columns": ["sku", "name", "uom", "cost_method", "standard_cost", "barcode"],

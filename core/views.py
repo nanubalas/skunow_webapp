@@ -52,7 +52,8 @@ from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from core.auth import role_required, ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE, ROLE_SALES, ROLE_FINANCE, ROLE_READONLY
+from core.auth import role_required, permission_required, ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE, ROLE_SALES, ROLE_FINANCE, ROLE_READONLY
+from core import permissions as permissions_mod
 
 
 
@@ -328,6 +329,59 @@ def audit_log_list(request):
     tenant = _get_default_tenant(request)
     logs = AuditLog.objects.filter(tenant=tenant)[:300]
     return render(request, "audit_log.html", {"tenant": tenant, "logs": logs})
+
+
+def _csv_response(filename, columns, rows):
+    import csv as _csv
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    writer = _csv.writer(resp)
+    writer.writerow(columns)
+    for r in rows:
+        writer.writerow(r)
+    return resp
+
+
+@permission_required(permissions_mod.EXPORT_DATA)
+def data_export(request, kind):
+    """Download a tenant's products/customers/suppliers as CSV (gated by export_data)."""
+    from core.services import importer
+    if kind not in importer.CONFIG:
+        raise Http404("Unknown export type.")
+    tenant = _get_default_tenant(request)
+    columns, rows = importer.export_rows(tenant, kind)
+    log_audit(action="DATA_EXPORTED", request=request, user=request.user, tenant=tenant,
+              detail=f"{kind} ({len(rows)} rows)")
+    return _csv_response(f"{kind}.csv", columns, rows)
+
+
+@role_required([ROLE_ADMIN], [ROLE_ADMIN])
+def audit_log_export(request):
+    """Download the audit log for the active organisation as CSV (admin only)."""
+    tenant = _get_default_tenant(request)
+    logs = AuditLog.objects.filter(tenant=tenant)[:5000]
+    columns = ["timestamp", "action", "user", "detail", "path", "ip"]
+    rows = [[l.created_at.strftime("%Y-%m-%d %H:%M:%S"), l.action,
+             l.username or "", l.detail or "", l.path or "", l.ip or ""] for l in logs]
+    log_audit(action="DATA_EXPORTED", request=request, user=request.user, tenant=tenant,
+              detail=f"audit log ({len(rows)} rows)")
+    return _csv_response("audit-log.csv", columns, rows)
+
+
+@login_required
+def change_password(request):
+    """Self-service password change; audited as PASSWORD_CHANGED."""
+    from django.contrib.auth.forms import PasswordChangeForm
+    from django.contrib.auth import update_session_auth_hash
+    form = PasswordChangeForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        update_session_auth_hash(request, user)
+        log_audit(action="PASSWORD_CHANGED", request=request, user=request.user,
+                  tenant=_get_default_tenant(request))
+        messages.success(request, "Your password has been changed.")
+        return redirect("change_password")
+    return render(request, "auth/change_password.html", {"form": form})
 
 
 @role_required([ROLE_ADMIN], [ROLE_ADMIN])
@@ -1294,6 +1348,8 @@ def product_delete(request, product_id):
     obj = get_object_or_404(Product, id=product_id, tenant=tenant)
 
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Product {obj.sku} - {obj.name}")
         obj.delete()
         messages.success(request, "Product deleted.")
         return redirect("product_list")
@@ -1350,6 +1406,8 @@ def supplier_delete(request, supplier_id):
     tenant = _get_default_tenant(request)
     obj = get_object_or_404(Supplier, id=supplier_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Supplier {obj.name}")
         obj.delete()
         messages.success(request, "Supplier deleted.")
         return redirect("supplier_list")
@@ -1403,6 +1461,8 @@ def location_delete(request, location_id):
     tenant = _get_default_tenant(request)
     obj = get_object_or_404(Location, id=location_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Location {obj.name}")
         obj.delete()
         messages.success(request, "Location deleted.")
         return redirect("location_list")
@@ -1450,6 +1510,8 @@ def channel_delete(request, conn_id):
     tenant = _get_default_tenant(request)
     obj = get_object_or_404(ChannelConnection, id=conn_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Channel connection {obj.name}")
         obj.delete()
         messages.success(request, "Connection deleted.")
         return redirect("channel_list")
@@ -1686,6 +1748,8 @@ def uom_delete(request, uom_id):
     tenant = _get_default_tenant(request)
     obj = get_object_or_404(UnitOfMeasure, id=uom_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"UOM {obj}")
         obj.delete()
         messages.success(request, "UOM deleted.")
         return redirect("uom_list")
@@ -1739,6 +1803,8 @@ def uom_conversion_delete(request, conv_id):
     tenant = _get_default_tenant(request)
     obj = get_object_or_404(UOMConversion, id=conv_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"UOM conversion {obj}")
         obj.delete()
         messages.success(request, "Conversion deleted.")
         return redirect("uom_conversion_list")
@@ -1792,6 +1858,8 @@ def bom_delete(request, bom_id):
     tenant = _get_default_tenant(request)
     bom = get_object_or_404(BillOfMaterials, id=bom_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"BOM {bom}")
         bom.delete()
         messages.success(request, "BOM deleted.")
         return redirect("bom_list")
@@ -2227,6 +2295,8 @@ def taxcode_delete(request, tax_id):
     tenant = _get_default_tenant(request)
     obj = get_object_or_404(TaxCode, id=tax_id, tenant=tenant)
     if request.method == "POST":
+        log_audit(action="RECORD_DELETED", request=request, user=request.user, tenant=tenant,
+                  detail=f"Tax code {obj}")
         obj.delete()
         return redirect("taxcode_list")
     return render(request, "tax/taxcode_delete.html", {"tenant": tenant, "tax": obj})
