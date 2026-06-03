@@ -353,6 +353,59 @@ class UserManagementTests(TestCase):
         self.assertEqual(c.get("/users/").status_code, 403)
 
 
+class AuditTrailPhase3Tests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership, Product
+        self.tenant = Tenant.objects.create(name="Audit Co")
+        self.admin = User.objects.create_user("auadmin", password="pw")
+        OrgMembership.objects.create(user=self.admin, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.sales = User.objects.create_user("ausales", password="pw")
+        OrgMembership.objects.create(user=self.sales, tenant=self.tenant, role="SALES", is_default=True)
+        self.product = Product.objects.create(tenant=self.tenant, sku="SKU-DEL", name="Doomed")
+
+    def test_record_delete_audited(self):
+        from core.models import AuditLog
+        self.client.login(username="auadmin", password="pw")
+        resp = self.client.post(f"/products/{self.product.id}/delete/")
+        self.assertEqual(resp.status_code, 302)
+        log = AuditLog.objects.filter(action="RECORD_DELETED").first()
+        self.assertIsNotNone(log)
+        self.assertIn("SKU-DEL", log.detail)
+
+    def test_data_export_csv_and_audit(self):
+        from core.models import AuditLog
+        self.client.login(username="auadmin", password="pw")
+        resp = self.client.get("/export/products.csv")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("SKU-DEL", resp.content.decode())
+        self.assertTrue(AuditLog.objects.filter(action="DATA_EXPORTED").exists())
+
+    def test_data_export_blocked_without_permission(self):
+        self.client.login(username="ausales", password="pw")  # SALES lacks export_data
+        self.assertEqual(self.client.get("/export/products.csv").status_code, 403)
+
+    def test_audit_log_export_admin_only(self):
+        self.client.login(username="ausales", password="pw")
+        self.assertEqual(self.client.get("/audit/export.csv").status_code, 403)
+        self.client.login(username="auadmin", password="pw")
+        resp = self.client.get("/audit/export.csv")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("timestamp", resp.content.decode())
+
+    def test_password_change_audited(self):
+        from core.models import AuditLog
+        self.client.login(username="auadmin", password="pw")
+        resp = self.client.post("/account/password/", {
+            "old_password": "pw",
+            "new_password1": "Str0ng-Pass-99",
+            "new_password2": "Str0ng-Pass-99",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(AuditLog.objects.filter(action="PASSWORD_CHANGED").exists())
+        self.assertTrue(self.client.login(username="auadmin", password="Str0ng-Pass-99"))
+
+
 class PermissionMatrixTests(TestCase):
     def test_matrix_helpers(self):
         from core import permissions as P
