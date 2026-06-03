@@ -138,6 +138,18 @@
       transition: all .18s ease;
     }
     .skn-iconbtn:hover { background: var(--skn-brand-soft); color: var(--skn-brand); border-color: transparent; transform: translateY(-1px); }
+    /* Back button */
+    .skn-back {
+      display: inline-flex; align-items: center; gap: .4rem;
+      height: 40px; padding: 0 .85rem 0 .7rem; border-radius: 999px;
+      border: 1px solid var(--skn-border); background: var(--skn-surface);
+      color: var(--skn-text); font-weight: 600; font-size: .9rem;
+      transition: all .18s ease;
+    }
+    .skn-back i { transition: transform .18s ease; }
+    .skn-back:hover { background: var(--skn-brand-soft); color: var(--skn-brand); border-color: transparent; }
+    .skn-back:hover i { transform: translateX(-3px); }
+    @media (max-width: 575.98px) { .skn-back-label { display: none; } .skn-back { padding: 0; width: 40px; justify-content: center; } }
     .skn-userchip {
       display: inline-flex; align-items: center; gap: .5rem;
       padding: .3rem .7rem; border-radius: 999px;
@@ -321,6 +333,9 @@
             aria-controls="skunowMenu" aria-label="Open menu">
       <i class="bi bi-list fs-5"></i>
     </button>
+    <button class="skn-back me-2" id="sknBack" type="button" title="Go back" style="display:none;">
+      <i class="bi bi-arrow-left"></i><span class="skn-back-label">Back</span>
+    </button>
     {% endif %}
 
     <a class="navbar-brand d-flex align-items-center gap-2 fs-5" href="/">
@@ -436,6 +451,23 @@
       try { localStorage.setItem("skunow-theme", next); } catch (e) {}
       syncIcon();
     });
+  })();
+
+  // ---- Back button (interior pages only) ----
+  (function () {
+    var btn = document.getElementById("sknBack");
+    if (!btn) return;
+    var path = window.location.pathname.replace(/\/+$/, "") || "/";
+    // Hide on top-level / entry pages where "back" isn't meaningful.
+    var roots = ["", "/", "/dashboard", "/login", "/select-org", "/request-access"];
+    var isRoot = roots.indexOf(path) !== -1 || path.indexOf("/dashboard/") === 0;
+    if (!isRoot) {
+      btn.style.display = "inline-flex";
+      btn.addEventListener("click", function () {
+        if (window.history.length > 1) { window.history.back(); }
+        else { window.location.href = "/"; }
+      });
+    }
   })();
 </script>
 
