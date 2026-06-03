@@ -310,6 +310,49 @@ class CompanyProfileTests(TestCase):
         self.assertFalse(resp.context["form"].is_valid())
 
 
+class UserManagementTests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership
+        self.tenant = Tenant.objects.create(name="Members Co")
+        self.admin = User.objects.create_user("mgadmin", password="pw")
+        OrgMembership.objects.create(user=self.admin, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.bob = User.objects.create_user("bob", password="pw")
+        self.bob_m = OrgMembership.objects.create(user=self.bob, tenant=self.tenant, role="SALES", is_default=True)
+        self.client.login(username="mgadmin", password="pw")
+
+    def test_members_list_renders(self):
+        resp = self.client.get("/users/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "bob")
+
+    def test_change_role_audited(self):
+        from core.models import OrgMembership, AuditLog
+        resp = self.client.post(f"/users/{self.bob_m.id}/role/", {"role": "WAREHOUSE"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(OrgMembership.objects.get(id=self.bob_m.id).role, "WAREHOUSE")
+        self.assertTrue(AuditLog.objects.filter(action="ROLE_CHANGED").exists())
+
+    def test_deactivate_and_remove(self):
+        from core.models import OrgMembership, AuditLog
+        self.client.post(f"/users/{self.bob_m.id}/active/")
+        self.bob.refresh_from_db()
+        self.assertFalse(self.bob.is_active)
+        self.assertTrue(AuditLog.objects.filter(action="USER_DEACTIVATED").exists())
+        self.client.post(f"/users/{self.bob_m.id}/remove/")
+        self.assertFalse(OrgMembership.objects.filter(id=self.bob_m.id).exists())
+        self.assertTrue(AuditLog.objects.filter(action="USER_REMOVED").exists())
+
+    def test_cannot_remove_last_admin(self):
+        from core.models import OrgMembership
+        admin_m = OrgMembership.objects.get(user=self.admin, tenant=self.tenant)
+        resp = self.client.post(f"/users/{admin_m.id}/remove/")
+        self.assertTrue(OrgMembership.objects.filter(id=admin_m.id).exists())  # blocked
+
+    def test_non_admin_blocked(self):
+        c = Client(); c.login(username="bob", password="pw")
+        self.assertEqual(c.get("/users/").status_code, 403)
+
+
 class PermissionMatrixTests(TestCase):
     def test_matrix_helpers(self):
         from core import permissions as P

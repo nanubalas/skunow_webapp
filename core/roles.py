@@ -133,7 +133,7 @@ NAV = [
     ("Administration", [
         ("Setup & Onboarding", "/onboarding/", "rocket-takeoff", {ADMIN}),
         ("Company Profile", "/settings/tenant/", "building-gear", {ADMIN}),
-        ("Users & Roles", "/admin/", "people-fill", {ADMIN}),
+        ("Users & Roles", "/users/", "people-fill", {ADMIN}),
         ("Roles & Permissions", "/team/permissions/", "shield-check", {ADMIN}),
         ("Access Requests", "/access-requests/", "person-plus", {ADMIN}),
         ("Audit Log", "/audit/", "shield-lock", {ADMIN}),
