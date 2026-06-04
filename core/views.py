@@ -1749,6 +1749,67 @@ def supplier_delete(request, supplier_id):
         return redirect("supplier_list")
     return render(request, "suppliers/supplier_delete.html", {"tenant": tenant, "supplier": obj})
 
+
+@login_required
+@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_FINANCE, ROLE_READONLY])
+def supplier_detail(request, supplier_id):
+    """Supplier profile: details, purchase orders, bills, payments, outstanding
+    payables, products supplied, price history, notes and an activity timeline."""
+    tenant = _get_default_tenant(request)
+    s = get_object_or_404(Supplier, id=supplier_id, tenant=tenant)
+
+    pos = list(PurchaseOrder.objects.filter(tenant=tenant, supplier=s)
+               .prefetch_related("lines", "lines__product").order_by("-created_at", "-id"))
+    bills = list(SupplierInvoice.objects.filter(tenant=tenant, supplier=s)
+                 .prefetch_related("lines", "lines__tax_code", "payment_allocations", "credit_notes")
+                 .order_by("-invoice_date", "-id"))
+    payments = list(Payment.objects.filter(tenant=tenant, supplier=s).order_by("-payment_date", "-id"))
+    credit_notes = list(CreditNote.objects.filter(tenant=tenant, supplier=s, kind=CreditNote.Kind.PURCHASE)
+                        .order_by("-credit_note_date", "-id"))
+
+    # Products supplied + price history, derived from this supplier's PO lines.
+    products = {}
+    price_history = []
+    for po in pos:
+        po_date = po.created_at.date()
+        for line in po.lines.all():
+            p = line.product
+            info = products.setdefault(p.id, {"product": p, "times": 0, "last_cost": None, "last_date": None})
+            info["times"] += 1
+            if info["last_date"] is None or po_date >= info["last_date"]:
+                info["last_date"] = po_date
+                info["last_cost"] = line.unit_cost
+            price_history.append({"date": po_date, "product": p, "unit_cost": line.unit_cost,
+                                  "ref": po.po_number})
+    products_supplied = sorted(products.values(), key=lambda x: x["product"].sku)
+    price_history.sort(key=lambda r: r["date"], reverse=True)
+
+    timeline = []
+    for po in pos:
+        timeline.append({"date": po.created_at.date(), "icon": "file-earmark-text", "kind": "PO",
+                         "text": f"PO {po.po_number} ({po.get_status_display()})", "url": f"/po/{po.id}/"})
+    for b in bills:
+        timeline.append({"date": b.invoice_date, "icon": "receipt-cutoff", "kind": "Bill",
+                         "text": f"Bill {b.invoice_number} ({b.get_status_display()}) - {b.total}", "url": f"/invoices/{b.id}/"})
+    for p in payments:
+        timeline.append({"date": p.payment_date, "icon": "cash-stack", "kind": "Payment",
+                         "text": f"Payment {p.amount} ({p.get_method_display()})", "url": f"/payments/{p.id}/"})
+    for cn in credit_notes:
+        timeline.append({"date": cn.credit_note_date, "icon": "arrow-return-left", "kind": "Credit note",
+                         "text": f"Credit note {cn.credit_note_number} - {cn.total}", "url": f"/credit-notes/{cn.id}/"})
+    timeline.sort(key=lambda e: e["date"], reverse=True)
+
+    purchases_total = sum((b.total for b in bills if b.status == "POSTED"), Decimal("0.00"))
+
+    return render(request, "suppliers/supplier_detail.html", {
+        "tenant": tenant, "s": s,
+        "pos": pos[:10], "bills": bills[:10], "payments": payments[:10],
+        "products_supplied": products_supplied, "price_history": price_history[:30],
+        "timeline": timeline[:40], "purchases_total": purchases_total,
+        "po_count": len(pos),
+    })
+
+
 @login_required
 @role_required([ROLE_ADMIN, ROLE_WAREHOUSE, ROLE_READONLY])
 

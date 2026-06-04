@@ -1,0 +1,32 @@
+{% load money %}
+<div class="card mb-3"><div class="card-body">
+  <h6 class="fw-bold mb-3">{{ title }}</h6>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          {% if kind == "po" %}
+            <td><a class="text-decoration-none" href="{% url 'po_detail' r.id %}">{{ r.po_number }}</a></td>
+            <td class="text-muted small">{{ r.created_at|date:'d M Y' }}</td>
+            <td>{{ r.get_status_display }}</td>
+          {% elif kind == "bill" %}
+            <td><a class="text-decoration-none" href="{% url 'invoice_detail' r.id %}">{{ r.invoice_number }}</a></td>
+            <td class="text-muted small">{{ r.invoice_date|date:'d M Y' }}</td>
+            <td>{{ r.get_status_display }}</td>
+            <td class="text-end">{{ r.total|money:tenant.currency_code }}</td>
+            <td class="text-end text-muted">{{ r.outstanding|money:tenant.currency_code }} due</td>
+          {% elif kind == "payment" %}
+            <td><a class="text-decoration-none" href="{% url 'payment_detail' r.id %}">{{ r.get_direction_display }}</a></td>
+            <td class="text-muted small">{{ r.payment_date|date:'d M Y' }}</td>
+            <td>{{ r.get_method_display }}</td>
+            <td class="text-end">{{ r.amount|money:tenant.currency_code }}</td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td class="text-muted text-center py-3">None.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>

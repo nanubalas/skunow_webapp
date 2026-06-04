@@ -2468,3 +2468,44 @@ class SupplierRecordTests(TestCase):
         body = self.client.get("/export/suppliers.csv").content.decode()
         self.assertIn("contact_person", body)
         self.assertIn("Imported Supplies", body)
+
+
+class SupplierProfileTests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership, PurchaseOrder, PurchaseOrderLine, GoodsReceipt, Location, SupplierInvoice, SupplierInvoiceLine
+        from core.services.gl import post_supplier_invoice
+        self.tenant = Tenant.objects.create(name="SupProf Co")
+        self.std = TaxCode.objects.get(tenant=self.tenant, code="STD")
+        self.supplier = Supplier.objects.create(tenant=self.tenant, name="Globex", contact_person="Pat", categories="Raw materials")
+        self.loc = Location.objects.create(tenant=self.tenant, name="WH")
+        self.prod = Product.objects.create(tenant=self.tenant, sku="SKU-PR1", name="Widget")
+        po = PurchaseOrder.objects.create(tenant=self.tenant, po_number="PO-PR1", supplier=self.supplier)
+        PurchaseOrderLine.objects.create(po=po, product=self.prod, ordered_qty=Decimal("10"), unit_cost=Decimal("4.00"))
+        grn = GoodsReceipt.objects.create(tenant=self.tenant, po=po, grn_number="GRN-PR1", received_to=self.loc, status=GoodsReceipt.Status.POSTED)
+        inv = SupplierInvoice.objects.create(tenant=self.tenant, supplier=self.supplier, po=po, receipt=grn, invoice_number="BILL-PR1")
+        SupplierInvoiceLine.objects.create(invoice=inv, product=self.prod, qty=Decimal("10"), unit_cost=Decimal("4.00"), tax_code=self.std)
+        post_supplier_invoice(inv)
+        self.user = User.objects.create_user("spu", password="pw")
+        OrgMembership.objects.create(user=self.user, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.client.login(username="spu", password="pw")
+
+    def test_profile_shows_pos_bills_products_price_history(self):
+        resp = self.client.get(f"/suppliers/{self.supplier.id}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "PO-PR1")
+        self.assertContains(resp, "BILL-PR1")
+        self.assertContains(resp, "Products supplied")
+        self.assertContains(resp, "Price history")
+        self.assertContains(resp, "SKU-PR1")
+        # products supplied + price history populated
+        self.assertEqual(len(resp.context["products_supplied"]), 1)
+        self.assertEqual(resp.context["products_supplied"][0]["last_cost"], Decimal("4.00"))
+        self.assertGreaterEqual(len(resp.context["price_history"]), 1)
+        # outstanding payables = 48 (40 net + 20% VAT)
+        self.assertEqual(resp.context["s"].outstanding_payables, Decimal("48.00"))
+
+    def test_timeline_sorted(self):
+        resp = self.client.get(f"/suppliers/{self.supplier.id}/")
+        dates = [e["date"] for e in resp.context["timeline"]]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+        self.assertGreaterEqual(len(dates), 2)  # PO + bill
