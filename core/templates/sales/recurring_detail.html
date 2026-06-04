@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}{{ t.name }} - Recurring - SwifPro BI{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'recurring_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+    <div>
+      <h2 class="fw-bold mb-0">{{ t.name }}</h2>
+      <div class="text-muted">{{ t.customer.name }} &bull;
+        {% if t.is_active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Paused</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{% url 'recurring_generate' t.id %}">{% csrf_token %}<button class="btn btn-success"><i class="bi bi-lightning-charge me-1"></i> Generate now</button></form>
+    <form method="post" action="{% url 'recurring_toggle' t.id %}">{% csrf_token %}<button class="btn btn-outline-secondary">{% if t.is_active %}Pause{% else %}Resume{% endif %}</button></form>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-body">
+    <h5 class="fw-bold mb-3">Schedule</h5>
+    <dl class="row mb-0">
+      <dt class="col-5 text-muted fw-normal">Frequency</dt><dd class="col-7">Every {{ t.interval }} &times; {{ t.get_frequency_display|lower }}</dd>
+      <dt class="col-5 text-muted fw-normal">Start</dt><dd class="col-7">{{ t.start_date|date:'d M Y' }}</dd>
+      <dt class="col-5 text-muted fw-normal">Next run</dt><dd class="col-7 fw-semibold">{{ t.next_run_date|date:'d M Y' }}</dd>
+      <dt class="col-5 text-muted fw-normal">End</dt><dd class="col-7">{{ t.end_date|date:'d M Y'|default:'-' }}</dd>
+      <dt class="col-5 text-muted fw-normal">Generated</dt><dd class="col-7">{{ t.occurrences }}{% if t.max_occurrences %} / {{ t.max_occurrences }}{% endif %}</dd>
+      <dt class="col-5 text-muted fw-normal">On generation</dt><dd class="col-7">{% if t.auto_issue %}Issue &amp; post to ledger{% else %}Leave as draft{% endif %}</dd>
+    </dl>
+  </div></div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-body">
+    <h5 class="fw-bold mb-3">Template lines</h5>
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light"><tr><th>Item</th><th class="text-end">Qty</th><th class="text-end">Price</th><th class="text-end">Line</th></tr></thead>
+      <tbody>
+        {% for l in t.lines.all %}
+        <tr><td>{{ l.description|default:l.product.name }}</td><td class="text-end">{{ l.qty|floatformat:2 }}</td>
+          <td class="text-end">{{ l.unit_price|money:t.currency_code }}</td><td class="text-end">{{ l.line_total|money:t.currency_code }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="table-light"><tr><th colspan="3" class="text-end">Total</th><th class="text-end">{{ t.total|money:t.currency_code }}</th></tr></tfoot>
+    </table>
+  </div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+  <h5 class="fw-bold mb-3">Recent invoices for {{ t.customer.name }}</h5>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light"><tr><th>Invoice</th><th class="text-end">Date</th><th>Status</th><th class="text-end">Total</th></tr></thead>
+      <tbody>
+        {% for i in generated %}
+        <tr><td><a href="{% url 'ar_invoice_detail' i.id %}">{{ i.invoice_number }}</a></td>
+          <td class="text-end text-muted">{{ i.invoice_date|date:'d M Y' }}</td>
+          <td>{{ i.display_status }}</td><td class="text-end">{{ i.total|money:i.currency_code }}</td></tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted py-4">None yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+{% endblock %}

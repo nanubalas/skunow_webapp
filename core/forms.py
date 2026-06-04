@@ -15,7 +15,8 @@ from core.models import (
     SupplierInvoice, SupplierInvoiceLine,
     TaxCode, Customer, CustomerInvoice, CustomerInvoiceLine, GLAccount,
     Payment, AccessRequest, Expense, CreditNote, CreditNoteLine, BankTransaction,
-    SalesQuote, SalesQuoteLine, CustomerOrder, CustomerOrderLine
+    SalesQuote, SalesQuoteLine, CustomerOrder, CustomerOrderLine,
+    RecurringInvoice, RecurringInvoiceLine
 )
 
 
@@ -506,6 +507,42 @@ class CustomerOrderForm(TenantModelForm):
 
 CustomerOrderLineFormSet = inlineformset_factory(
     CustomerOrder, CustomerOrderLine, form=TenantModelForm,
+    fields=("product", "description", "qty", "unit_price", "discount_pct", "tax_code"),
+    extra=1, can_delete=True,
+)
+
+
+class RecurringInvoiceForm(TenantModelForm):
+    class Meta:
+        model = RecurringInvoice
+        fields = ["name", "customer", "frequency", "interval", "start_date", "next_run_date",
+                  "end_date", "max_occurrences", "auto_issue", "notes", "terms"]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "next_run_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+            "terms": forms.Textarea(attrs={"rows": 2}),
+        }
+        help_texts = {
+            "interval": "Every N periods (e.g. 1 = every month, 2 = every other month).",
+            "next_run_date": "The date the next invoice will be generated.",
+            "auto_issue": "Post each generated invoice to the ledger automatically.",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["next_run_date"].required = False  # defaults to start_date
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("next_run_date") and cleaned.get("start_date"):
+            cleaned["next_run_date"] = cleaned["start_date"]
+        return cleaned
+
+
+RecurringInvoiceLineFormSet = inlineformset_factory(
+    RecurringInvoice, RecurringInvoiceLine, form=TenantModelForm,
     fields=("product", "description", "qty", "unit_price", "discount_pct", "tax_code"),
     extra=1, can_delete=True,
 )

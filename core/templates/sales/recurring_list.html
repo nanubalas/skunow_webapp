@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}Recurring Invoices - SwifPro BI{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-1">Recurring Invoices</h2>
+    <div class="text-muted">Templates that generate customer invoices on a schedule.</div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if due_count %}
+    <form method="post" action="{% url 'recurring_run_due' %}">{% csrf_token %}
+      <button class="btn btn-success"><i class="bi bi-lightning-charge me-1"></i> Generate due ({{ due_count }})</button>
+    </form>
+    {% endif %}
+    <a class="btn btn-primary" href="{% url 'recurring_create' %}"><i class="bi bi-plus-lg me-1"></i> New template</a>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light"><tr><th>Name</th><th>Customer</th><th>Schedule</th><th class="text-end">Next run</th><th class="text-end">Amount</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for t in templates %}
+        <tr onclick="window.location='{% url 'recurring_detail' t.id %}'" style="cursor:pointer;">
+          <td class="fw-semibold">{{ t.name }}</td>
+          <td>{{ t.customer.name }}</td>
+          <td class="small">Every {{ t.interval }} &times; {{ t.get_frequency_display|lower }}{% if t.auto_issue %} &bull; auto-issue{% endif %}</td>
+          <td class="text-end {% if t.is_active and t.next_run_date <= today %}fw-bold text-success{% endif %}">{{ t.next_run_date|date:'d M Y' }}</td>
+          <td class="text-end">{{ t.total|money:t.currency_code }}</td>
+          <td>{% if t.is_active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Paused</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-5">No recurring invoice templates yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="form-text mt-2">Tip: schedule <code>manage.py run_recurring_invoices</code> daily to generate these automatically.</div>
+</div></div>
+{% endblock %}

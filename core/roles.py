@@ -98,6 +98,7 @@ NAV = [
         ("Quotes", "/quotes/", "file-earmark-text", {ADMIN, MANAGER, SALES}),
         ("Sales Orders", "/customer-orders/", "cart-check", {ADMIN, MANAGER, SALES}),
         ("Customer Invoices", "/ar/invoices/", "receipt", {ADMIN, MANAGER, SALES, ACCOUNTANT, FINANCE}),
+        ("Recurring Invoices", "/recurring-invoices/", "arrow-repeat", {ADMIN, MANAGER, SALES, ACCOUNTANT, FINANCE}),
         ("Customers", "/customers/", "people", {ADMIN, MANAGER, SALES, ACCOUNTANT, FINANCE}),
         ("Returns (RMA)", "/returns/", "arrow-return-left", {ADMIN, MANAGER, SALES, WAREHOUSE}),
         ("Channel Orders", "/sales-orders/", "bag", {ADMIN, MANAGER, SALES}),

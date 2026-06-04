@@ -972,6 +972,40 @@ class CustomerOrderLine(_SalesLine):
     order = models.ForeignKey(CustomerOrder, related_name="lines", on_delete=models.CASCADE)
 
 
+class RecurringInvoice(_SalesTotalsMixin, models.Model):
+    """A template that generates customer invoices on a schedule."""
+    class Frequency(models.TextChoices):
+        WEEKLY = "WEEKLY", "Weekly"
+        MONTHLY = "MONTHLY", "Monthly"
+        QUARTERLY = "QUARTERLY", "Quarterly"
+        YEARLY = "YEARLY", "Yearly"
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="recurring_invoices")
+    customer = models.ForeignKey("Customer", on_delete=models.PROTECT, related_name="recurring_invoices")
+    name = models.CharField(max_length=120)  # e.g. "Monthly retainer"
+    frequency = models.CharField(max_length=10, choices=Frequency.choices, default=Frequency.MONTHLY)
+    interval = models.PositiveSmallIntegerField(default=1)  # every N periods
+    start_date = models.DateField(default=timezone.now)
+    next_run_date = models.DateField()
+    end_date = models.DateField(blank=True, null=True)
+    max_occurrences = models.PositiveIntegerField(blank=True, null=True)
+    occurrences = models.PositiveIntegerField(default=0)
+    auto_issue = models.BooleanField(default=True)  # post to GL on generation vs leave draft
+    currency_code = models.CharField(max_length=3, default="GBP")
+    notes = models.TextField(blank=True, null=True)
+    terms = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    last_run_at = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.customer})"
+
+
+class RecurringInvoiceLine(_SalesLine):
+    template = models.ForeignKey(RecurringInvoice, related_name="lines", on_delete=models.CASCADE)
+
+
 # ============================
 # Finance (VAT + AR + GL)
 # ============================

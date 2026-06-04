@@ -21,6 +21,7 @@ from core.models import (
     GLAccount, JournalEntry, Payment, PaymentAllocation, VatReturn, Expense,
     CreditNote, CreditNoteLine, BankTransaction,
     SalesQuote, SalesQuoteLine, CustomerOrder, CustomerOrderLine,
+    RecurringInvoice, RecurringInvoiceLine,
     OrgMembership, AuditLog, AccessRequest, UserProfile, UserPermissionOverride
 )
 from django.core.exceptions import PermissionDenied
@@ -44,7 +45,8 @@ from core.forms import (
     GLAccountForm, ReceiptForm, SupplierPaymentForm, AccessRequestForm,
     NewOrganisationForm, InviteUserForm, ExpenseForm,
     CreditNoteForm, CreditNoteLineFormSet, BankTransactionForm,
-    SalesQuoteForm, SalesQuoteLineFormSet, CustomerOrderForm, CustomerOrderLineFormSet
+    SalesQuoteForm, SalesQuoteLineFormSet, CustomerOrderForm, CustomerOrderLineFormSet,
+    RecurringInvoiceForm, RecurringInvoiceLineFormSet
 )
 from core.services.inventory import apply_movement, reserve_stock, release_reservations
 from core.services.bom import explode_product
@@ -3031,6 +3033,94 @@ def corder_to_invoice(request, order_id):
         messages.success(request, f"Sales order {o.order_number} converted to invoice {inv.invoice_number} (draft).")
         return redirect("ar_invoice_detail", invoice_id=inv.id)
     return redirect("corder_detail", order_id=o.id)
+
+
+# ---- Recurring invoices ----
+
+@role_required(SALES_DOC_READ, write_groups=SALES_DOC_ROLES)
+def recurring_list(request):
+    tenant = _get_default_tenant(request)
+    templates = RecurringInvoice.objects.filter(tenant=tenant).select_related("customer").prefetch_related("lines", "lines__tax_code").order_by("-is_active", "next_run_date")
+    due = [t for t in templates if t.is_active and t.next_run_date <= timezone.localdate()]
+    return render(request, "sales/recurring_list.html", {
+        "tenant": tenant, "templates": templates, "due_count": len(due), "today": timezone.localdate()})
+
+
+@role_required(SALES_DOC_ROLES, write_groups=SALES_DOC_ROLES)
+@transaction.atomic
+def recurring_create(request):
+    tenant = _get_default_tenant(request)
+    t = RecurringInvoice(tenant=tenant, currency_code=tenant.currency_code)
+    if request.method == "POST":
+        form = RecurringInvoiceForm(request.POST, instance=t)
+        formset = RecurringInvoiceLineFormSet(request.POST, instance=t)
+        if form.is_valid() and formset.is_valid():
+            t = form.save(commit=False)
+            t.tenant = tenant
+            t.currency_code = tenant.currency_code
+            if not t.next_run_date:
+                t.next_run_date = t.start_date
+            t.save()
+            formset.save()
+            messages.success(request, f"Recurring invoice '{t.name}' saved.")
+            return redirect("recurring_detail", template_id=t.id)
+    else:
+        initial = {}
+        if tenant.invoice_footer:
+            initial["terms"] = tenant.invoice_footer
+        form = RecurringInvoiceForm(instance=t, initial=initial)
+        line_initial = [{"tax_code": tenant.default_tax_code}] if tenant.default_tax_code_id else None
+        formset = RecurringInvoiceLineFormSet(instance=t, initial=line_initial)
+    return render(request, "sales/doc_form.html", {
+        "tenant": tenant, "form": form, "formset": formset,
+        "doc_label": "Recurring invoice", "list_url": "/recurring-invoices/"})
+
+
+@role_required(SALES_DOC_READ, write_groups=SALES_DOC_ROLES)
+def recurring_detail(request, template_id):
+    tenant = _get_default_tenant(request)
+    t = get_object_or_404(RecurringInvoice, id=template_id, tenant=tenant)
+    generated = CustomerInvoice.objects.filter(tenant=tenant, customer=t.customer).order_by("-invoice_date")[:50]
+    return render(request, "sales/recurring_detail.html", {"tenant": tenant, "t": t, "generated": generated})
+
+
+@role_required(SALES_DOC_ROLES, write_groups=SALES_DOC_ROLES)
+@transaction.atomic
+def recurring_toggle(request, template_id):
+    tenant = _get_default_tenant(request)
+    t = get_object_or_404(RecurringInvoice, id=template_id, tenant=tenant)
+    if request.method == "POST":
+        t.is_active = not t.is_active
+        t.save(update_fields=["is_active"])
+        messages.success(request, f"'{t.name}' {'resumed' if t.is_active else 'paused'}.")
+    return redirect("recurring_detail", template_id=t.id)
+
+
+@role_required(SALES_DOC_ROLES, write_groups=SALES_DOC_ROLES)
+@transaction.atomic
+def recurring_generate(request, template_id):
+    tenant = _get_default_tenant(request)
+    t = get_object_or_404(RecurringInvoice, id=template_id, tenant=tenant)
+    if request.method == "POST":
+        from core.services import recurring
+        created = recurring.generate_for_template(t, user=request.user)
+        log_audit(action="RECURRING_GENERATED", request=request, user=request.user, tenant=tenant,
+                  detail=f"{t.name}: {len(created)} invoice(s)")
+        messages.success(request, f"Generated {len(created)} invoice(s) from '{t.name}'." if created else "Nothing due to generate yet.")
+    return redirect("recurring_detail", template_id=t.id)
+
+
+@role_required(SALES_DOC_ROLES, write_groups=SALES_DOC_ROLES)
+@transaction.atomic
+def recurring_run_due(request):
+    tenant = _get_default_tenant(request)
+    if request.method == "POST":
+        from core.services import recurring
+        created = recurring.generate_due(tenant=tenant, user=request.user)
+        log_audit(action="RECURRING_GENERATED", request=request, user=request.user, tenant=tenant,
+                  detail=f"run due: {len(created)} invoice(s)")
+        messages.success(request, f"Generated {len(created)} invoice(s) from due recurring templates." if created else "No recurring invoices were due.")
+    return redirect("recurring_list")
 
 
 # ============================

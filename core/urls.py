@@ -110,6 +110,13 @@ urlpatterns = [
     path("customer-orders/<int:order_id>/status/<str:to>/", views.corder_status, name="corder_status"),
     path("customer-orders/<int:order_id>/to-invoice/", views.corder_to_invoice, name="corder_to_invoice"),
 
+    path("recurring-invoices/", views.recurring_list, name="recurring_list"),
+    path("recurring-invoices/new/", views.recurring_create, name="recurring_create"),
+    path("recurring-invoices/run-due/", views.recurring_run_due, name="recurring_run_due"),
+    path("recurring-invoices/<int:template_id>/", views.recurring_detail, name="recurring_detail"),
+    path("recurring-invoices/<int:template_id>/toggle/", views.recurring_toggle, name="recurring_toggle"),
+    path("recurring-invoices/<int:template_id>/generate/", views.recurring_generate, name="recurring_generate"),
+
     # Sales Orders (channel/ecommerce)
     path("sales-orders/", views.sales_order_list, name="sales_order_list"),
     path("sales-orders/new/", views.sales_order_create, name="sales_order_create"),
