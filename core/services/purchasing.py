@@ -1,7 +1,10 @@
-"""Purchasing helpers: supplier price-history capture and lookup."""
+"""Purchasing helpers: supplier price-history capture and lookup, plus
+return-to-supplier credit notes."""
 from decimal import Decimal
 
 from django.db.models import Avg
+from django.db import transaction
+from django.utils import timezone
 
 from core.models import SupplierPriceHistory
 
@@ -65,3 +68,43 @@ def average_price(tenant, supplier, product):
            .filter(tenant=tenant, supplier=supplier, product=product)
            .aggregate(a=Avg("unit_cost")))
     return agg["a"]
+
+
+@transaction.atomic
+def create_return_credit_note(adj, value, user=None):
+    """Create and post a purchase credit note for a return-to-supplier stock
+    adjustment, adjusting Accounts Payable. `value` is the (negative) costed
+    movement value; the credit is raised for its absolute amount against the
+    Inventory account (DR AP / CR Inventory). Returns the credit note, or None
+    when there's no supplier or no value."""
+    from core.models import CreditNote, CreditNoteLine
+    from core.numbering import next_document_number
+    from core.services.gl import post_credit_note
+
+    if adj.supplier_id is None:
+        return None
+    amount = abs(Decimal(value or "0.00"))
+    if amount <= Decimal("0.00"):
+        return None
+
+    cn = CreditNote.objects.create(
+        tenant=adj.tenant,
+        kind=CreditNote.Kind.PURCHASE,
+        credit_note_number=next_document_number(CreditNote, adj.tenant, "credit_note_number", "PCN-"),
+        credit_note_date=timezone.localdate(),
+        supplier=adj.supplier,
+        reason=f"Return to supplier: {adj.product.sku} x{abs(adj.qty_delta)}"
+               + (f" ({adj.notes})" if adj.notes else ""),
+        currency_code=getattr(adj.tenant, "currency_code", "GBP") or "GBP",
+    )
+    CreditNoteLine.objects.create(
+        credit_note=cn,
+        product=adj.product,
+        description=f"Returned to {adj.supplier.name}",
+        qty=abs(adj.qty_delta),
+        unit_amount=(amount / abs(adj.qty_delta)) if adj.qty_delta else amount,
+        tax_code=None,            # net-only: keeps inventory + AP balanced
+        account=None,             # defaults to Inventory for purchase credits
+    )
+    post_credit_note(cn, user=user)
+    return cn

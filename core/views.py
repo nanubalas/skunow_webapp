@@ -1931,12 +1931,23 @@ def _post_stock_adjustment(adj, user):
         ref_type="STOCK_ADJ", ref_id=str(adj.id),
         notes=(adj.get_reason_display() + (f": {adj.notes}" if adj.notes else "")), user=user,
     )
-    # Book the GL impact using the costed movement value (signed like qty_delta).
-    post_stock_adjustment(adj, getattr(movement, "value", None) or Decimal("0.00"), user=user)
+    value = getattr(movement, "value", None) or Decimal("0.00")
+    fields = ["status", "posted_at", "approved_by"]
+    if adj.reason == StockAdjustment.Reason.RETURN_SUPPLIER and adj.supplier_id:
+        # Return to supplier: raise a purchase credit note (DR AP / CR Inventory)
+        # rather than booking the value as shrinkage.
+        from core.services.purchasing import create_return_credit_note
+        cn = create_return_credit_note(adj, value, user=user)
+        if cn is not None:
+            adj.credit_note = cn
+            fields.append("credit_note")
+    else:
+        # Book the GL impact using the costed movement value (signed like qty_delta).
+        post_stock_adjustment(adj, value, user=user)
     adj.status = StockAdjustment.Status.POSTED
     adj.posted_at = timezone.now()
     adj.approved_by = user
-    adj.save(update_fields=["status", "posted_at", "approved_by"])
+    adj.save(update_fields=fields)
 
 
 @login_required

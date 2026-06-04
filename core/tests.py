@@ -3064,6 +3064,67 @@ class PurchaseRequisitionTests(TestCase):
         self.assertEqual(self.client.get(f"/requisitions/{req.id}/").status_code, 200)
 
 
+class ReturnToSupplierTests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership, GLAccount
+        from core.services.inventory import apply_movement
+        self.tenant = Tenant.objects.create(name="Ret Co")
+        self.loc = Location.objects.create(tenant=self.tenant, name="WH", type=Location.Type.WAREHOUSE)
+        self.supplier = Supplier.objects.create(tenant=self.tenant, name="Globex")
+        self.prod = Product.objects.create(tenant=self.tenant, sku="RT1", name="P")
+        apply_movement(tenant=self.tenant, product=self.prod, location=self.loc,
+                       movement_type="RECEIVE", qty_delta=Decimal("100"), ref_type="SEED", ref_id="1",
+                       unit_cost=Decimal("4.00"))
+        self.ap = GLAccount.objects.get(tenant=self.tenant, code="2000")
+        self.inv = GLAccount.objects.get(tenant=self.tenant, code="1000")
+        self.adj5200 = GLAccount.objects.get(tenant=self.tenant, code="5200")
+        self.user = User.objects.create_user("rtu", password="pw")
+        OrgMembership.objects.create(user=self.user, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.client.login(username="rtu", password="pw")
+
+    def _bal(self, acc):
+        from core.models import JournalLine
+        from django.db.models import Sum
+        agg = JournalLine.objects.filter(account=acc).aggregate(d=Sum("debit"), c=Sum("credit"))
+        return (agg["d"] or Decimal("0.00")) - (agg["c"] or Decimal("0.00"))
+
+    def test_return_creates_purchase_credit_note(self):
+        from core.models import StockAdjustment, CreditNote
+        resp = self.client.post("/inventory/adjustments/new/", {
+            "product": self.prod.id, "location": self.loc.id, "reason": "RETURN_SUPPLIER",
+            "supplier": self.supplier.id, "qty_delta": "-5", "notes": "faulty batch",
+        })
+        self.assertEqual(resp.status_code, 302)
+        adj = StockAdjustment.objects.get(tenant=self.tenant)
+        self.assertEqual(adj.status, StockAdjustment.Status.POSTED)
+        self.assertIsNotNone(adj.credit_note)
+        cn = adj.credit_note
+        self.assertEqual(cn.kind, CreditNote.Kind.PURCHASE)
+        self.assertEqual(cn.status, CreditNote.Status.POSTED)
+        # 5 units @ GBP4 = 20: DR AP (reduces payable) / CR Inventory; no shrinkage.
+        self.assertEqual(self._bal(self.ap), Decimal("20.00"))   # debit reduces the credit-normal AP
+        self.assertEqual(self._bal(self.inv), Decimal("-20.00"))  # credit reduces inventory
+        self.assertEqual(self._bal(self.adj5200), Decimal("0.00"))
+
+    def test_return_requires_supplier(self):
+        from core.models import StockAdjustment
+        resp = self.client.post("/inventory/adjustments/new/", {
+            "product": self.prod.id, "location": self.loc.id, "reason": "RETURN_SUPPLIER",
+            "qty_delta": "-5",
+        })
+        self.assertEqual(resp.status_code, 200)  # re-render with error
+        self.assertContains(resp, "Choose the supplier")
+        self.assertEqual(StockAdjustment.objects.count(), 0)
+
+    def test_return_must_be_negative(self):
+        resp = self.client.post("/inventory/adjustments/new/", {
+            "product": self.prod.id, "location": self.loc.id, "reason": "RETURN_SUPPLIER",
+            "supplier": self.supplier.id, "qty_delta": "5",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "must remove stock")
+
+
 class CustomerOrderReservationTests(TestCase):
     def setUp(self):
         from core.models import OrgMembership, InventoryBalance, CustomerOrder, CustomerOrderLine, Customer
