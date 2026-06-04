@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load money %}
+{% block title %}{{ s.name }} - Supplier - SwifPro BI{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'supplier_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+    <div>
+      <h2 class="fw-bold mb-0">{{ s.name }}</h2>
+      <div class="text-muted">
+        {% if s.status == 'ACTIVE' %}<span class="badge text-bg-success">Active</span>{% elif s.status == 'ON_HOLD' %}<span class="badge text-bg-warning">On hold</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}
+        {% for c in s.category_list %}<span class="badge text-bg-light text-dark border">{{ c }}</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+  <a class="btn btn-outline-primary" href="{% url 'supplier_edit' s.id %}"><i class="bi bi-pencil me-1"></i> Edit</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card stat-card p-3"><div class="text-muted small">Outstanding payables</div><div class="fs-4 fw-bold">{{ s.outstanding_payables|money:tenant.currency_code }}</div></div></div>
+  <div class="col-md-4"><div class="card stat-card p-3"><div class="text-muted small">Purchases (posted bills)</div><div class="fs-4 fw-bold">{{ purchases_total|money:tenant.currency_code }}</div><div class="small text-muted">{{ po_count }} purchase order(s)</div></div></div>
+  <div class="col-md-4"><div class="card stat-card p-3"><div class="text-muted small">Terms / currency</div><div class="fs-5 fw-bold">{% if s.payment_terms_days %}{{ s.payment_terms_days }} days{% else %}Default{% endif %}</div><div class="small text-muted">{{ s.currency_code }}</div></div></div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card mb-4"><div class="card-body">
+      <h5 class="fw-bold mb-3">Details</h5>
+      <dl class="row mb-0 small">
+        <dt class="col-5 text-muted fw-normal">Contact</dt><dd class="col-7">{{ s.contact_person|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Email</dt><dd class="col-7">{{ s.email|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Phone</dt><dd class="col-7">{{ s.phone|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">VAT number</dt><dd class="col-7">{{ s.vat_number|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Company no.</dt><dd class="col-7">{{ s.company_number|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Address</dt><dd class="col-7">{{ s.address|linebreaksbr|default:'-' }}</dd>
+      </dl>
+      <hr>
+      <div class="text-muted small fw-semibold mb-1">Bank details</div>
+      <dl class="row mb-0 small">
+        <dt class="col-5 text-muted fw-normal">Bank</dt><dd class="col-7">{{ s.bank_name|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Account name</dt><dd class="col-7">{{ s.bank_account_name|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Sort code</dt><dd class="col-7">{{ s.bank_sort_code|default:'-' }}</dd>
+        <dt class="col-5 text-muted fw-normal">Account no.</dt><dd class="col-7">{{ s.bank_account_number|default:'-' }}</dd>
+      </dl>
+      {% if s.notes %}<hr><div class="text-muted small">Notes</div><div class="small">{{ s.notes|linebreaksbr }}</div>{% endif %}
+    </div></div>
+
+    <div class="card"><div class="card-body">
+      <h5 class="fw-bold mb-3">Activity timeline</h5>
+      <ul class="list-unstyled mb-0">
+        {% for e in timeline %}
+        <li class="d-flex gap-2 mb-3"><span class="text-muted"><i class="bi bi-{{ e.icon }}"></i></span>
+          <div><a class="text-decoration-none" href="{{ e.url }}">{{ e.text }}</a><div class="text-muted small">{{ e.date|date:'d M Y' }}</div></div></li>
+        {% empty %}<li class="text-muted">No activity yet.</li>{% endfor %}
+      </ul>
+    </div></div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card mb-3"><div class="card-body">
+      <h6 class="fw-bold mb-3">Products supplied</h6>
+      <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+        <thead class="table-light"><tr><th>SKU</th><th>Product</th><th class="text-end">Times ordered</th><th class="text-end">Last cost</th></tr></thead>
+        <tbody>
+          {% for p in products_supplied %}
+          <tr><td>{{ p.product.sku }}</td><td>{{ p.product.name }}</td><td class="text-end">{{ p.times }}</td>
+            <td class="text-end">{% if p.last_cost is not None %}{{ p.last_cost|money:tenant.currency_code }}{% else %}-{% endif %}</td></tr>
+          {% empty %}<tr><td colspan="4" class="text-muted text-center py-3">No products ordered yet.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+    </div></div>
+
+    <div class="card mb-3"><div class="card-body">
+      <h6 class="fw-bold mb-3">Price history</h6>
+      <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+        <thead class="table-light"><tr><th>Date</th><th>Product</th><th>PO</th><th class="text-end">Unit cost</th></tr></thead>
+        <tbody>
+          {% for r in price_history %}
+          <tr><td class="text-muted small">{{ r.date|date:'d M Y' }}</td><td>{{ r.product.name }}</td>
+            <td class="small">{{ r.ref }}</td><td class="text-end">{{ r.unit_cost|money:tenant.currency_code }}</td></tr>
+          {% empty %}<tr><td colspan="4" class="text-muted text-center py-3">No price history yet.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+    </div></div>
+
+    {% include "suppliers/_mini_table.html" with title="Purchase orders" rows=pos kind="po" %}
+    {% include "suppliers/_mini_table.html" with title="Bills" rows=bills kind="bill" %}
+    {% include "suppliers/_mini_table.html" with title="Payments" rows=payments kind="payment" %}
+  </div>
+</div>
+{% endblock %}

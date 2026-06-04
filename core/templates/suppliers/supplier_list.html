@@ -32,7 +32,7 @@
         <tbody>
           {% for s in suppliers %}
           <tr>
-            <td class="fw-semibold">{{ s.name }}
+            <td class="fw-semibold"><a class="text-decoration-none" href="{% url 'supplier_detail' s.id %}">{{ s.name }}</a>
               <div class="text-muted small fw-normal">{{ s.email|default:'' }}</div></td>
             <td class="small">{{ s.contact_person|default:'-' }}</td>
             <td>{% for c in s.category_list %}<span class="badge text-bg-light text-dark border">{{ c }}</span> {% empty %}<span class="text-muted">-</span>{% endfor %}</td>
