@@ -1824,3 +1824,78 @@ class SalesDocumentFlowTests(TestCase):
         self.client.post(f"/quotes/{q.id}/status/accept/")
         q.refresh_from_db()
         self.assertEqual(q.status, "ACCEPTED")
+
+
+class RecurringInvoiceTests(TestCase):
+    def setUp(self):
+        from core.models import OrgMembership, RecurringInvoice, RecurringInvoiceLine
+        import datetime
+        self.tenant = Tenant.objects.create(name="Rec Co", default_payment_terms_days=14)
+        self.std = TaxCode.objects.get(tenant=self.tenant, code="STD")
+        self.customer = Customer.objects.create(tenant=self.tenant, name="Cust")
+        self.tmpl = RecurringInvoice.objects.create(
+            tenant=self.tenant, customer=self.customer, name="Monthly retainer",
+            frequency="MONTHLY", interval=1, start_date=datetime.date(2026, 1, 1),
+            next_run_date=datetime.date(2026, 1, 1), auto_issue=True)
+        RecurringInvoiceLine.objects.create(template=self.tmpl, description="Retainer",
+                                            qty=Decimal("1"), unit_price=Decimal("500.00"), tax_code=self.std)
+        self.user = User.objects.create_user("recu", password="pw")
+        OrgMembership.objects.create(user=self.user, tenant=self.tenant, role="ADMIN", is_default=True)
+        self.client.login(username="recu", password="pw")
+
+    def test_add_months_clamps_day(self):
+        import datetime
+        from core.services.recurring import add_months
+        self.assertEqual(add_months(datetime.date(2026, 1, 31), 1), datetime.date(2026, 2, 28))
+        self.assertEqual(add_months(datetime.date(2026, 11, 15), 3), datetime.date(2027, 2, 15))
+
+    def test_generate_catches_up_and_advances(self):
+        import datetime
+        from core.services import recurring
+        # From Jan 1 to Mar 15 2026 -> Jan, Feb, Mar = 3 monthly invoices.
+        created = recurring.generate_for_template(self.tmpl, today=datetime.date(2026, 3, 15))
+        self.assertEqual(len(created), 3)
+        self.tmpl.refresh_from_db()
+        self.assertEqual(self.tmpl.occurrences, 3)
+        self.assertEqual(self.tmpl.next_run_date, datetime.date(2026, 4, 1))
+        # All issued + numbered + due date set from terms.
+        for inv in created:
+            self.assertEqual(inv.status, "ISSUED")
+            self.assertTrue(inv.invoice_number.startswith("INV-"))
+            self.assertIsNotNone(inv.due_date)
+        self.assertEqual(created[0].total, Decimal("600.00"))  # 500 + 20% VAT
+
+    def test_max_occurrences_deactivates(self):
+        import datetime
+        from core.services import recurring
+        self.tmpl.max_occurrences = 2
+        self.tmpl.save()
+        created = recurring.generate_for_template(self.tmpl, today=datetime.date(2026, 12, 31))
+        self.assertEqual(len(created), 2)
+        self.tmpl.refresh_from_db()
+        self.assertFalse(self.tmpl.is_active)
+
+    def test_draft_mode_does_not_post(self):
+        import datetime
+        from core.services import recurring
+        self.tmpl.auto_issue = False
+        self.tmpl.save()
+        created = recurring.generate_for_template(self.tmpl, today=datetime.date(2026, 1, 1))
+        self.assertEqual(created[0].status, "DRAFT")
+
+    def test_generate_now_view(self):
+        resp = self.client.post(f"/recurring-invoices/{self.tmpl.id}/generate/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(CustomerInvoice.objects.filter(tenant=self.tenant).exists())
+
+    def test_create_view_auto_next_run(self):
+        from core.models import RecurringInvoice
+        resp = self.client.post("/recurring-invoices/new/", {
+            "name": "Weekly", "customer": self.customer.id, "frequency": "WEEKLY", "interval": "1",
+            "start_date": "2026-02-01", "next_run_date": "", "auto_issue": "on",
+            "lines-TOTAL_FORMS": "1", "lines-INITIAL_FORMS": "0", "lines-MIN_NUM_FORMS": "0", "lines-MAX_NUM_FORMS": "1000",
+            "lines-0-description": "Svc", "lines-0-qty": "1", "lines-0-unit_price": "10", "lines-0-discount_pct": "0", "lines-0-tax_code": self.std.id,
+        })
+        self.assertEqual(resp.status_code, 302)
+        t = RecurringInvoice.objects.get(tenant=self.tenant, name="Weekly")
+        self.assertEqual(t.next_run_date.isoformat(), "2026-02-01")  # defaulted from start
