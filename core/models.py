@@ -807,6 +807,9 @@ class StockAdjustment(models.Model):
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
     location = models.ForeignKey(Location, on_delete=models.PROTECT)
     reason = models.CharField(max_length=20, choices=Reason.choices, default=Reason.ADJUSTMENT)
+    # For RETURN_SUPPLIER: who the goods go back to (drives a purchase credit note).
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_returns")
+    credit_note = models.ForeignKey("CreditNote", on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_returns")
     qty_delta = models.DecimalField(max_digits=12, decimal_places=2)  # signed: +found / -loss
     notes = models.CharField(max_length=255, blank=True, null=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)

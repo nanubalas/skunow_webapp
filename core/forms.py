@@ -140,14 +140,29 @@ class ProductForm(TenantModelForm):
 class StockAdjustmentForm(TenantModelForm):
     class Meta:
         model = StockAdjustment
-        fields = ["product", "location", "reason", "qty_delta", "notes"]
-        help_texts = {"qty_delta": "Negative to remove stock (damage / loss / return to supplier); positive to add found stock."}
+        fields = ["product", "location", "reason", "supplier", "qty_delta", "notes"]
+        help_texts = {
+            "qty_delta": "Negative to remove stock (damage / loss / return to supplier); positive to add found stock.",
+            "supplier": "For 'Return to supplier' only — raises a purchase credit note that reduces Accounts Payable.",
+        }
 
     def clean_qty_delta(self):
         qty = self.cleaned_data.get("qty_delta")
         if qty is not None and qty == 0:
             raise forms.ValidationError("Quantity change cannot be zero.")
         return qty
+
+    def clean(self):
+        cleaned = super().clean()
+        reason = cleaned.get("reason")
+        supplier = cleaned.get("supplier")
+        qty = cleaned.get("qty_delta")
+        if reason == StockAdjustment.Reason.RETURN_SUPPLIER:
+            if not supplier:
+                self.add_error("supplier", "Choose the supplier the goods are returned to.")
+            if qty is not None and qty > 0:
+                self.add_error("qty_delta", "A return to supplier must remove stock (negative quantity).")
+        return cleaned
 
 
 class ProductCategoryForm(TenantModelForm):
