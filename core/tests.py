@@ -7006,6 +7006,96 @@ class UkRetailDemoScenarioTests(TestCase):
             self.assertEqual(bal.location.site_id, self.manchester.id)
 
 
+class GlobalSearchAndNavTests(TestCase):
+    """Permission-aware global search + grouped/collapsible hamburger menu, all
+    driven from the navigation registry in core.roles."""
+
+    def setUp(self):
+        from core.models import OrgMembership
+        self.t = Tenant.objects.create(name="Search Co")
+        self.admin = User.objects.create_user("srch_admin", password="pw")
+        OrgMembership.objects.create(user=self.admin, tenant=self.t, role="ADMIN", is_default=True)
+        self.sales = User.objects.create_user("srch_sales", password="pw")
+        OrgMembership.objects.create(user=self.sales, tenant=self.t, role="SALES", is_default=True)
+
+    def _urls(self, role, q):
+        from core.roles import search_nav
+        return [r["url"] for r in search_nav(role, q, limit=None)]
+
+    # ---- registry-level search ----
+    def test_search_returns_known_pages(self):
+        from core.roles import ADMIN
+        self.assertEqual(self._urls(ADMIN, "purchase orders")[0], "/po/")
+        self.assertIn("/inventory/", self._urls(ADMIN, "inventory"))
+        self.assertIn("/uoms/", self._urls(ADMIN, "units of measure"))
+        self.assertIn("/stock-takes/", self._urls(ADMIN, "stock take"))
+
+    def test_aliases_resolve(self):
+        from core.roles import ADMIN
+        self.assertEqual(self._urls(ADMIN, "po")[0], "/po/")
+        self.assertIn("/requisitions/", self._urls(ADMIN, "pr"))
+        self.assertIn("/shipments/", self._urls(ADMIN, "grn"))
+        self.assertTrue(set(self._urls(ADMIN, "uom")) & {"/uoms/", "/uom-conversions/"})
+        self.assertTrue(set(self._urls(ADMIN, "gl")) & {"/gl/journal/", "/gl/accounts/"})
+        self.assertIn("/returns/", self._urls(ADMIN, "rma"))
+        self.assertTrue(set(self._urls(ADMIN, "vat")) & {"/vat/", "/tax-codes/"})
+        self.assertIn("/gl/accounts/", self._urls(ADMIN, "coa"))
+        self.assertIn("/invoices/", self._urls(ADMIN, "ap"))
+
+    def test_short_alias_does_not_false_match(self):
+        # "po" must surface Purchase Orders, never "Reports" / "Products".
+        from core.roles import ADMIN
+        urls = self._urls(ADMIN, "po")
+        self.assertEqual(urls[0], "/po/")
+        self.assertNotIn("/reports/", urls)
+        self.assertNotIn("/products/", urls)
+
+    def test_search_is_permission_aware(self):
+        from core.roles import SALES
+        # Sales has no GL or procurement access -> those pages never appear.
+        self.assertNotIn("/gl/journal/", self._urls(SALES, "journal"))
+        self.assertNotIn("/po/", self._urls(SALES, "po"))
+        # But Sales-accessible pages still resolve.
+        self.assertIn("/customers/", self._urls(SALES, "customers"))
+
+    # ---- view / endpoint ----
+    def test_search_page_renders(self):
+        self.client.login(username="srch_admin", password="pw")
+        resp = self.client.get("/search/?q=inventory")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Inventory")
+
+    def test_suggest_endpoint_json(self):
+        import json
+        self.client.login(username="srch_admin", password="pw")
+        resp = self.client.get("/search/suggest/?q=uom")
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.content)
+        urls = [r["url"] for r in data["results"]]
+        self.assertTrue(set(urls) & {"/uoms/", "/uom-conversions/"})
+
+    def test_suggest_endpoint_permission_aware(self):
+        import json
+        self.client.login(username="srch_sales", password="pw")
+        resp = self.client.get("/search/suggest/?q=journal")
+        data = json.loads(resp.content)
+        self.assertNotIn("/gl/journal/", [r["url"] for r in data["results"]])
+
+    def test_menu_renders_grouped_collapsible_with_filter(self):
+        self.client.login(username="srch_admin", password="pw")
+        resp = self.client.get("/", follow=True)
+        self.assertContains(resp, 'id="menuFilter"')         # menu search box
+        self.assertContains(resp, "skn-navgroup")            # collapsible groups
+        self.assertContains(resp, "Procurement")             # a grouped section
+        self.assertContains(resp, 'id="globalSearchInput"')  # header search bar
+
+    def test_important_modules_reachable_for_admin(self):
+        from core.roles import ADMIN
+        for q in ["inventory", "purchase orders", "customers", "uom",
+                  "stock takes", "chart of accounts", "vat returns"]:
+            self.assertTrue(self._urls(ADMIN, q), f"no results for {q!r}")
+
+
 class StockTakeTests(TestCase):
     """Full physical stock-take: snapshot, blind entry, valuation, staleness
     guard, approval, GL posting, idempotency, closed periods, tenant isolation."""

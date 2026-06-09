@@ -323,6 +323,63 @@
     }
     .offcanvas .list-group-item.active i { color: var(--skn-brand); }
 
+    /* ---------- Global header search ---------- */
+    .skn-search { position: relative; width: 100%; max-width: 460px; }
+    .skn-search-ico {
+      position: absolute; left: .85rem; top: 50%; transform: translateY(-50%);
+      color: var(--skn-muted); font-size: .95rem; pointer-events: none;
+    }
+    .skn-search-input {
+      width: 100%; height: 40px; padding: 0 .9rem 0 2.3rem;
+      border-radius: 999px; border: 1px solid var(--skn-border);
+      background: var(--skn-surface); color: var(--skn-text); font-size: .9rem;
+      transition: border-color .16s ease, box-shadow .16s ease;
+    }
+    .skn-search-input::placeholder { color: var(--skn-muted); }
+    .skn-search-input:focus {
+      outline: none; border-color: var(--skn-brand);
+      box-shadow: 0 0 0 .22rem rgba(var(--skn-brand-rgb), .18);
+    }
+    .skn-search-results {
+      position: absolute; top: calc(100% + .4rem); left: 0; right: 0; z-index: 1080;
+      background: var(--skn-surface); border: 1px solid var(--skn-border);
+      border-radius: var(--skn-radius); box-shadow: var(--skn-shadow-lg);
+      overflow: hidden; max-height: 70vh; overflow-y: auto;
+    }
+    .skn-search-item {
+      display: flex; align-items: flex-start; gap: .65rem; padding: .55rem .8rem;
+      color: var(--skn-text); text-decoration: none; cursor: pointer; border: 0; width: 100%;
+      background: transparent; text-align: left;
+    }
+    .skn-search-item:hover, .skn-search-item.active { background: var(--skn-brand-soft); }
+    .skn-search-item i { color: var(--skn-muted); width: 1.2rem; text-align: center; margin-top: .15rem; }
+    .skn-search-item:hover i, .skn-search-item.active i { color: var(--skn-brand); }
+    .skn-search-item .si-label { font-weight: 600; font-size: .9rem; }
+    .skn-search-item .si-section { font-size: .72rem; color: var(--skn-muted); }
+    .skn-search-empty { padding: .8rem; color: var(--skn-muted); font-size: .85rem; text-align: center; }
+
+    /* ---------- Offcanvas: menu filter + collapsible groups ---------- */
+    .skn-menu-search { position: relative; margin-bottom: 1rem; }
+    .skn-menu-search input {
+      width: 100%; height: 40px; padding: 0 .8rem 0 2.2rem;
+      border-radius: 999px; border: 1px solid var(--skn-border);
+      background: var(--skn-surface-2); color: var(--skn-text); font-size: .88rem;
+    }
+    .skn-menu-search input:focus { outline: none; border-color: var(--skn-brand); background: var(--skn-surface); }
+    .skn-menu-search i { position: absolute; left: .8rem; top: 50%; transform: translateY(-50%); color: var(--skn-muted); font-size: .9rem; }
+    .skn-navgroup-hdr {
+      display: flex; align-items: center; justify-content: space-between; width: 100%;
+      background: transparent; border: 0; padding: .3rem .25rem; margin-bottom: .15rem;
+      color: var(--skn-muted); cursor: pointer; border-radius: 8px;
+    }
+    .skn-navgroup-hdr:hover { background: var(--skn-surface-2); }
+    .skn-navgroup-caret { transition: transform .18s ease; font-size: .8rem; }
+    .skn-navgroup.collapsed .skn-navgroup-caret { transform: rotate(-90deg); }
+    .skn-navgroup.collapsed .skn-navgroup-body { display: none; }
+    .skn-navgroup { margin-bottom: .6rem; }
+    .skn-navgroup-body .list-group-item[hidden] { display: none !important; }
+    @media (max-width: 991.98px) { .skn-search { max-width: none; } }
+
     /* ---------- Motion ---------- */
     @keyframes sknFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
     .skn-page { animation: sknFadeUp .4s ease both; }
@@ -374,6 +431,18 @@
     <a class="navbar-brand d-flex align-items-center gap-2 fs-5" href="/">
       <img src="{% static 'img/logo.png' %}" alt="SwifPro BI" height="30" width="30" class="logo-light" style="border-radius:7px;"><img src="{% static 'img/logo-dark.png' %}" alt="SwifPro BI" height="30" width="30" class="logo-dark" style="border-radius:7px;"> {% include "_wordmark.html" %}
     </a>
+
+    {% if user.is_authenticated %}
+    <div class="flex-grow-1 d-none d-md-flex justify-content-center px-3">
+      <form class="skn-search" role="search" method="get" action="{% url 'global_search' %}" autocomplete="off">
+        <i class="bi bi-search skn-search-ico"></i>
+        <input type="search" name="q" class="skn-search-input" id="globalSearchInput"
+               placeholder="Search modules, pages, reports…" aria-label="Search"
+               aria-autocomplete="list" aria-controls="globalSearchResults">
+        <div class="skn-search-results" id="globalSearchResults" hidden></div>
+      </form>
+    </div>
+    {% endif %}
 
     <div class="ms-auto d-flex align-items-center gap-2">
       {% if user.is_authenticated %}
@@ -456,21 +525,43 @@
       <i class="bi bi-person-badge"></i> {{ active_role_label }}
     </div>
     {% endif %}
-    {% for section_title, items in sidebar %}
-    <div class="mb-3">
-      <div class="text-uppercase text-muted mb-2 nav-section-title">{{ section_title }}</div>
-      <div class="list-group list-group-flush">
-        {% for label, url, icon in items %}
-        <a href="{{ url }}" class="list-group-item list-group-item-action"><i class="bi bi-{{ icon }}"></i> {{ label }}</a>
+
+    <div class="skn-menu-search">
+      <i class="bi bi-search"></i>
+      <input type="search" id="menuFilter" placeholder="Search menu…" aria-label="Filter menu" autocomplete="off">
+    </div>
+
+    <div id="menuFilterEmpty" class="text-muted small text-center py-3" hidden>No menu items match.</div>
+
+    <div id="navGroups">
+    {% for section_title, entries in nav_groups %}
+    <div class="skn-navgroup" data-group="{{ section_title }}">
+      <button type="button" class="skn-navgroup-hdr" aria-expanded="true">
+        <span class="text-uppercase nav-section-title">{{ section_title }}</span>
+        <i class="bi bi-chevron-down skn-navgroup-caret"></i>
+      </button>
+      <div class="skn-navgroup-body list-group list-group-flush">
+        {% for e in entries %}
+        <a href="{{ e.url }}" class="list-group-item list-group-item-action"
+           data-label="{{ e.label }}" data-keywords="{{ e.keywords|join:' ' }} {{ section_title }}">
+          <i class="bi bi-{{ e.icon }}"></i> {{ e.label }}
+        </a>
         {% endfor %}
       </div>
     </div>
     {% endfor %}
-    <div class="mb-3">
-      <div class="text-uppercase text-muted mb-2 nav-section-title">Account</div>
-      <div class="list-group list-group-flush">
-        <a href="{% url 'change_password' %}" class="list-group-item list-group-item-action"><i class="bi bi-key"></i> Change password</a>
+    <div class="skn-navgroup" data-group="Account">
+      <button type="button" class="skn-navgroup-hdr" aria-expanded="true">
+        <span class="text-uppercase nav-section-title">Account</span>
+        <i class="bi bi-chevron-down skn-navgroup-caret"></i>
+      </button>
+      <div class="skn-navgroup-body list-group list-group-flush">
+        <a href="{% url 'change_password' %}" class="list-group-item list-group-item-action"
+           data-label="Change password" data-keywords="password security account">
+          <i class="bi bi-key"></i> Change password
+        </a>
       </div>
+    </div>
     </div>
   </div>
 </div>
@@ -500,7 +591,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  // ---- Sidebar active state (supports sub-routes like /products/12/edit/) ----
+  // ---- Sidebar active state + collapsible groups ----
   (function () {
     const path = window.location.pathname;
     const links = Array.from(document.querySelectorAll(".offcanvas a.list-group-item"));
@@ -513,6 +604,122 @@
       if (matches && href.length > bestLen) { best = a; bestLen = href.length; }
     });
     if (best) best.classList.add("active");
+
+    const KEY = "swifpro-nav-collapsed";
+    let collapsed = {};
+    try { collapsed = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+    const groups = Array.from(document.querySelectorAll(".skn-navgroup"));
+    const activeGroup = best ? best.closest(".skn-navgroup") : null;
+
+    function applyState(g) {
+      const name = g.getAttribute("data-group");
+      const isCollapsed = collapsed[name] === true && g !== activeGroup;
+      g.classList.toggle("collapsed", isCollapsed);
+      const hdr = g.querySelector(".skn-navgroup-hdr");
+      if (hdr) hdr.setAttribute("aria-expanded", String(!isCollapsed));
+    }
+    groups.forEach(applyState);
+
+    groups.forEach(g => {
+      const hdr = g.querySelector(".skn-navgroup-hdr");
+      if (!hdr) return;
+      hdr.addEventListener("click", () => {
+        const nowCollapsed = !g.classList.contains("collapsed");
+        g.classList.toggle("collapsed", nowCollapsed);
+        hdr.setAttribute("aria-expanded", String(!nowCollapsed));
+        collapsed[g.getAttribute("data-group")] = nowCollapsed;
+        try { localStorage.setItem(KEY, JSON.stringify(collapsed)); } catch (e) {}
+      });
+    });
+
+    // Expose a restore so the menu filter can return to saved state when cleared.
+    window.__sknRestoreNav = function () { groups.forEach(applyState); };
+  })();
+
+  // ---- Hamburger menu instant filter ----
+  (function () {
+    const input = document.getElementById("menuFilter");
+    if (!input) return;
+    const groups = Array.from(document.querySelectorAll(".skn-navgroup"));
+    const empty = document.getElementById("menuFilterEmpty");
+
+    input.addEventListener("input", function () {
+      const q = input.value.trim().toLowerCase();
+      if (!q) {
+        groups.forEach(g => {
+          g.hidden = false;
+          g.querySelectorAll(".list-group-item").forEach(a => { a.hidden = false; });
+        });
+        if (window.__sknRestoreNav) window.__sknRestoreNav();
+        if (empty) empty.hidden = true;
+        return;
+      }
+      let anyVisible = false;
+      groups.forEach(g => {
+        let groupHas = false;
+        g.querySelectorAll(".list-group-item").forEach(a => {
+          const hay = ((a.getAttribute("data-label") || "") + " " +
+                       (a.getAttribute("data-keywords") || "")).toLowerCase();
+          const hit = hay.indexOf(q) !== -1;
+          a.hidden = !hit;
+          if (hit) groupHas = true;
+        });
+        g.hidden = !groupHas;
+        g.classList.toggle("collapsed", false);   // expand matching groups
+        if (groupHas) anyVisible = true;
+      });
+      if (empty) empty.hidden = anyVisible;
+    });
+  })();
+
+  // ---- Global header search autocomplete ----
+  (function () {
+    const input = document.getElementById("globalSearchInput");
+    const box = document.getElementById("globalSearchResults");
+    if (!input || !box) return;
+    let items = [], active = -1, timer = null, lastQ = "";
+
+    function close() { box.hidden = true; box.innerHTML = ""; items = []; active = -1; }
+    function render(results) {
+      if (!results.length) {
+        box.innerHTML = '<div class="skn-search-empty">No matches. Try PO, GRN, UOM, GL…</div>';
+        box.hidden = false; items = []; active = -1; return;
+      }
+      box.innerHTML = results.map(r =>
+        '<a class="skn-search-item" href="' + r.url + '">' +
+        '<i class="bi bi-' + r.icon + '"></i>' +
+        '<span><span class="si-label d-block">' + r.label + '</span>' +
+        '<span class="si-section">' + r.section + '</span></span></a>'
+      ).join("");
+      items = Array.from(box.querySelectorAll(".skn-search-item"));
+      active = -1; box.hidden = false;
+    }
+    function fetchSuggest(q) {
+      fetch("{% url 'search_suggest' %}?q=" + encodeURIComponent(q), {headers: {"X-Requested-With": "fetch"}})
+        .then(r => r.json())
+        .then(d => { if (input.value.trim() === q) render(d.results || []); })
+        .catch(() => {});
+    }
+    input.addEventListener("input", function () {
+      const q = input.value.trim();
+      if (q === lastQ) return;
+      lastQ = q;
+      clearTimeout(timer);
+      if (q.length < 1) { close(); return; }
+      timer = setTimeout(() => fetchSuggest(q), 140);
+    });
+    input.addEventListener("keydown", function (e) {
+      if (box.hidden || !items.length) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % items.length; }
+      else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + items.length) % items.length; }
+      else if (e.key === "Enter") { if (active >= 0) { e.preventDefault(); window.location.href = items[active].getAttribute("href"); return; } }
+      else if (e.key === "Escape") { close(); return; }
+      else return;
+      items.forEach((it, i) => it.classList.toggle("active", i === active));
+    });
+    document.addEventListener("click", function (e) {
+      if (!box.contains(e.target) && e.target !== input) close();
+    });
   })();
 
   // ---- Theme toggle (persisted) ----

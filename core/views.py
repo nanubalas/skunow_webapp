@@ -4119,6 +4119,34 @@ def report_stock_take(request):
     })
 
 
+# ---------------------------------------------------------------------------
+# Global navigation search (permission-aware, derived from the nav registry)
+# ---------------------------------------------------------------------------
+
+@login_required
+def global_search(request):
+    """Full-page search across every module/page the current role can access.
+    Results come from the navigation registry (core.roles), so a page never
+    appears for a user who cannot open it."""
+    role = get_active_role(request)
+    q = (request.GET.get("q") or "").strip()
+    results = roles_mod.search_nav(role, q, limit=None) if q else []
+    return render(request, "search/results.html",
+                  {"q": q, "results": results, "result_count": len(results)})
+
+
+@login_required
+def search_suggest(request):
+    """Lightweight JSON endpoint backing the header search autocomplete."""
+    from django.http import JsonResponse
+    role = get_active_role(request)
+    q = (request.GET.get("q") or "").strip()
+    results = roles_mod.search_nav(role, q, limit=8) if q else []
+    return JsonResponse({"results": [
+        {"label": r["label"], "section": r["section"], "url": r["url"],
+         "icon": r["icon"], "description": r["description"]} for r in results]})
+
+
 @login_required
 @role_required([ROLE_ADMIN, ROLE_WAREHOUSE])
 def transfer_list(request):
