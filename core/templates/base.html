@@ -446,8 +446,9 @@
 
     <div class="ms-auto d-flex align-items-center gap-2">
       {% if user.is_authenticated %}
-      <button class="skn-back me-1" id="sknBack" type="button" title="Go back" style="display:none;">
-        <i class="bi bi-arrow-left"></i><span class="skn-back-label">Back</span>
+      <button class="skn-back me-1" id="sknBack" type="button" title="Go back"
+              data-back-url="{% block back_url %}{% endblock %}" style="display:none;">
+        <i class="bi bi-arrow-left"></i><span class="skn-back-label">{% block back_label %}Back{% endblock %}</span>
       </button>
       {% endif %}
       {% if user.is_authenticated %}
@@ -795,7 +796,9 @@
     });
   })();
 
-  // ---- Back button (interior pages only) ----
+  // ---- Hybrid Back button (interior pages only) ----
+  // Priority: 1) page-declared logical back URL, 2) safe same-origin browser
+  // history, 3) the authenticated landing page (never the public "/").
   (function () {
     var btn = document.getElementById("sknBack");
     if (!btn) return;
@@ -803,13 +806,30 @@
     // Hide on top-level / entry pages where "back" isn't meaningful.
     var roots = ["", "/", "/dashboard", "/login", "/select-org", "/request-access"];
     var isRoot = roots.indexOf(path) !== -1 || path.indexOf("/dashboard/") === 0;
-    if (!isRoot) {
-      btn.style.display = "inline-flex";
-      btn.addEventListener("click", function () {
-        if (window.history.length > 1) { window.history.back(); }
-        else { window.location.href = "/"; }
-      });
+    if (isRoot) return;  // stays hidden
+
+    var LANDING = "/dashboard/";
+    var declared = (btn.getAttribute("data-back-url") || "").trim();
+
+    // Only trust an in-app (same-origin) referrer that isn't this very page.
+    function safeReferrer() {
+      try {
+        if (!document.referrer) return null;
+        var u = new URL(document.referrer);
+        if (u.origin !== window.location.origin) return null;
+        if (u.pathname === window.location.pathname) return null;
+        return true;
+      } catch (e) { return null; }
     }
+
+    btn.style.display = "inline-flex";
+    btn.addEventListener("click", function () {
+      if (declared) { window.location.href = declared; return; }   // 1
+      if (safeReferrer() && window.history.length > 1) {           // 2
+        window.history.back(); return;
+      }
+      window.location.href = LANDING;                              // 3
+    });
   })();
 </script>
 

@@ -7375,3 +7375,52 @@ class StockTakeTests(TestCase):
         resp = c2.get(reverse("stock_take_detail", args=[s.id]))
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(StockTakeSession.objects.filter(tenant=t2).count(), 0)
+
+
+class BackNavigationTests(TestCase):
+    """Hybrid global Back: pages declare a logical back_url via the base.html
+    block; the header button renders it. Local Back/Cancel links stay intact."""
+
+    def setUp(self):
+        from core.models import OrgMembership, StockTakeSession
+        self.t = Tenant.objects.create(name="Back Co")
+        self.loc = Location.objects.create(tenant=self.t, name="WH")
+        self.user = User.objects.create_user("backu", password="pw")
+        OrgMembership.objects.create(user=self.user, tenant=self.t, role="ADMIN", is_default=True)
+        self.client.login(username="backu", password="pw")
+        self.session = StockTakeSession.objects.create(
+            tenant=self.t, scope=StockTakeSession.Scope.LOCATION, location=self.loc,
+            status=StockTakeSession.Status.SNAPSHOTTED, reference="ST-BK")
+
+    def test_search_page_declares_dashboard_back(self):
+        resp = self.client.get("/search/?q=po")
+        self.assertContains(resp, 'data-back-url="/dashboard/"')
+
+    def test_report_page_declares_reports_index_back(self):
+        resp = self.client.get("/reports/stock-take/")
+        self.assertContains(resp, 'data-back-url="/reports/"')
+
+    def test_stock_take_detail_back_to_list(self):
+        resp = self.client.get(f"/stock-takes/{self.session.id}/")
+        self.assertContains(resp, 'data-back-url="/stock-takes/"')
+
+    def test_stock_take_count_back_to_detail_and_keeps_local_link(self):
+        resp = self.client.get(f"/stock-takes/{self.session.id}/count/")
+        detail_url = f"/stock-takes/{self.session.id}/"
+        # Global declared back -> detail.
+        self.assertContains(resp, f'data-back-url="{detail_url}"')
+        # Local "Back" button (to the same detail page) is NOT removed.
+        self.assertContains(resp, f'href="{detail_url}">Back</a>')
+
+    def test_create_form_declares_list_back_and_keeps_cancel(self):
+        resp = self.client.get("/stock-takes/new/")
+        self.assertContains(resp, 'data-back-url="/stock-takes/"')
+        self.assertContains(resp, 'href="/stock-takes/">Cancel</a>')   # local cancel intact
+
+    def test_po_pages_declare_list_back(self):
+        self.assertContains(self.client.get("/po/new/"), 'data-back-url="/po/"')
+
+    def test_dashboard_has_no_declared_back(self):
+        # Root/landing pages declare no logical parent (JS also hides the button).
+        resp = self.client.get("/", follow=True)
+        self.assertContains(resp, 'data-back-url=""')
