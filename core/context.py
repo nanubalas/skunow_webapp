@@ -38,6 +38,10 @@ def nav(request):
         "active_role": role,
         "active_role_label": roles.ROLE_LABELS.get(role, role),
         "sidebar": roles.sidebar_for_role(role),
+        # Same registry, enriched with description + keywords, grouped by section.
+        # Drives the offcanvas menu (incl. its instant filter) and keeps a single
+        # permission-aware source for navigation + search.
+        "nav_groups": roles.search_groups(role),
         "membership_count": len(memberships),
         "active_tenant_name": getattr(tenant, "name", ""),
         "active_tenant_id": getattr(tenant, "id", None),

@@ -225,6 +225,10 @@ urlpatterns = [
     path("stock-takes/<int:session_id>/cancel/", views.stock_take_cancel, name="stock_take_cancel"),
     path("reports/stock-take/", views.report_stock_take, name="report_stock_take"),
 
+    # Global navigation search
+    path("search/", views.global_search, name="global_search"),
+    path("search/suggest/", views.search_suggest, name="search_suggest"),
+
     # VAT / Tax
 path("tax-codes/", views.taxcode_list, name="taxcode_list"),
 path("tax-codes/new/", views.taxcode_create, name="taxcode_create"),

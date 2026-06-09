@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Search - SwifPro BI{% endblock %}
+{% block body %}
+<div class="mb-4">
+  <h2 class="fw-bold mb-1">Search</h2>
+  <div class="text-muted">Find any module, page or report you have access to.</div>
+</div>
+
+<form method="get" action="{% url 'global_search' %}" class="mb-4" autocomplete="off">
+  <div class="input-group input-group-lg" style="max-width:640px;">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="search" name="q" class="form-control" value="{{ q }}"
+           placeholder="Search modules, pages, reports…" autofocus aria-label="Search">
+    <button class="btn btn-primary" type="submit">Search</button>
+  </div>
+</form>
+
+{% if q %}
+  <div class="text-muted small mb-3">{{ result_count }} result{{ result_count|pluralize }} for &ldquo;{{ q }}&rdquo;</div>
+  <div class="row g-3">
+    {% for r in results %}
+    <div class="col-md-6 col-lg-4">
+      <a class="tile p-3 h-100 d-flex align-items-start gap-3 text-decoration-none text-reset" href="{{ r.url }}">
+        <span class="mini-stat"><span class="ico"><i class="bi bi-{{ r.icon }}"></i></span></span>
+        <span class="flex-grow-1">
+          <span class="d-flex align-items-center gap-2">
+            <span class="fw-semibold">{{ r.label }}</span>
+            <span class="badge text-bg-primary">{{ r.section }}</span>
+          </span>
+          {% if r.description %}<span class="d-block text-muted small mt-1">{{ r.description }}</span>{% endif %}
+        </span>
+      </a>
+    </div>
+    {% empty %}
+    <div class="col-12">
+      <div class="card card-soft"><div class="card-body text-center text-muted py-5">
+        <i class="bi bi-search fs-3 d-block mb-2"></i>
+        No pages match &ldquo;{{ q }}&rdquo;. Try a module name or an alias like
+        <code>PO</code>, <code>GRN</code>, <code>UOM</code> or <code>GL</code>.
+      </div></div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card card-soft"><div class="card-body text-muted">
+    Type a keyword above — try a page name (<em>Purchase Orders</em>, <em>Stock Takes</em>) or a short alias
+    (<code>PO</code>, <code>GRN</code>, <code>UOM</code>, <code>GL</code>, <code>RMA</code>, <code>VAT</code>).
+  </div></div>
+{% endif %}
+{% endblock %}
