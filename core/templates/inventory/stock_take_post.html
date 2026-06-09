@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Post Stock Take {{ session.reference|default:session.id }}{% endblock %}
+{% block back_url %}{% url 'stock_take_detail' session.id %}{% endblock %}
 {% block body %}
 <div class="mb-4">
   <h2 class="fw-bold mb-1">Post Stock Take {{ session.reference|default:session.id }}</h2>
