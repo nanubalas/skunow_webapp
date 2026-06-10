@@ -2461,6 +2461,154 @@ def low_stock_reorder(request):
     return redirect("requisition_list")
 
 
+# ============================
+# Replenishment planning (min/max, projected available, suggestions, ABC)
+# ============================
+
+@login_required
+@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE, ROLE_READONLY])
+def replenishment_plan(request):
+    """Replenishment planning board: projected availability, urgency, and
+    suggested purchase/transfer quantities per product/location."""
+    from core.services import replenishment as rsvc
+    from core.models import ProductCategory
+    tenant = _get_default_tenant(request)
+    f_location = request.GET.get("location") or ""
+    f_supplier = request.GET.get("supplier") or ""
+    f_category = request.GET.get("category") or ""
+    f_status = request.GET.get("status") or ""
+    f_below = request.GET.get("below") == "1"
+    f_over = request.GET.get("overstock") == "1"
+    active_only = request.GET.get("all") != "1"
+
+    rows = rsvc.plan(
+        tenant,
+        location=int(f_location) if f_location else None,
+        supplier=int(f_supplier) if f_supplier else None,
+        category=int(f_category) if f_category else None,
+        status=f_status or None, below_reorder=f_below, overstock=f_over, active_only=active_only)
+
+    allowed = active_location_ids(request)  # scope to the selected site
+    if allowed is not None:
+        rows = [r for r in rows if r["location"].id in allowed]
+
+    open_req = rsvc.open_requisition_product_ids(tenant)
+    for r in rows:
+        r["has_open_req"] = r["product"].id in open_req
+        r["token"] = f'{r["product"].id}:{r["location"].id}'
+
+    locations = Location.objects.filter(tenant=tenant)
+    if allowed is not None:
+        locations = locations.filter(id__in=allowed)
+    return render(request, "inventory/replenishment.html", {
+        "tenant": tenant, "rows": rows,
+        "locations": locations.order_by("name"),
+        "suppliers": Supplier.objects.filter(tenant=tenant).order_by("name"),
+        "categories": ProductCategory.objects.filter(tenant=tenant).order_by("name"),
+        "status_choices": [("critical", "Critical"), ("below_safety", "Below safety"),
+                           ("below_reorder", "Below reorder"), ("overstock", "Overstock"), ("okay", "OK")],
+        "f_location": f_location, "f_supplier": f_supplier, "f_category": f_category,
+        "f_status": f_status, "f_below": f_below, "f_over": f_over, "f_all": not active_only,
+        "filtered": bool(f_location or f_supplier or f_category or f_status or f_below or f_over),
+    })
+
+
+@login_required
+@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE], [ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE])
+@transaction.atomic
+def replenishment_reorder(request):
+    """Create purchase requisitions from selected replenishment lines, grouped by
+    preferred supplier, skipping products that already have an open requisition."""
+    from core.services import replenishment as rsvc
+    tenant = _get_default_tenant(request)
+    if request.method != "POST":
+        return redirect("replenishment_plan")
+    selected = request.POST.getlist("select")   # tokens "productid:locationid"
+    if not selected:
+        messages.info(request, "Select at least one line to reorder.")
+        return redirect("replenishment_plan")
+
+    open_req = rsvc.open_requisition_product_ids(tenant)
+    products = {p.id: p for p in Product.objects.filter(tenant=tenant).select_related("preferred_supplier")}
+    groups, skipped, seen = {}, [], set()
+    for token in selected:
+        pid_s = token.split(":")[0]
+        try:
+            pid = int(pid_s)
+        except ValueError:
+            continue
+        p = products.get(pid)
+        if p is None or pid in seen:
+            continue
+        if pid in open_req:
+            skipped.append(p.sku)
+            continue
+        raw = (request.POST.get(f"qty_{token}") or "").strip()
+        try:
+            qty = Decimal(raw)
+        except (InvalidOperation, ValueError):
+            qty = Decimal("0")
+        if qty <= 0:
+            continue
+        seen.add(pid)
+        groups.setdefault(p.preferred_supplier, []).append((p, qty))
+
+    created = []
+    for supplier, items in groups.items():
+        req = PurchaseRequisition.objects.create(
+            tenant=tenant, req_number=_generate_req_number(), preferred_supplier=supplier,
+            justification="Raised from replenishment planning.",
+            status=PurchaseRequisition.Status.DRAFT, requested_by=request.user)
+        for p, qty in items:
+            PurchaseRequisitionLine.objects.create(
+                requisition=req, product=p, quantity=qty,
+                estimated_unit_cost=(p.standard_cost or None), notes="Replenishment suggestion")
+        created.append(req)
+        log_audit(action="requisition_create", request=request, user=request.user, tenant=tenant,
+                  detail=f"{req.req_number} replenishment ({len(items)} lines)")
+
+    if skipped:
+        messages.warning(request, "Skipped (already on an open requisition): " + ", ".join(sorted(set(skipped))))
+    if not created:
+        messages.info(request, "No requisitions created.")
+        return redirect("replenishment_plan")
+    if len(created) == 1:
+        messages.success(request, f"Created requisition {created[0].req_number} from replenishment.")
+        return redirect("requisition_detail", req_id=created[0].id)
+    messages.success(request, f"Created {len(created)} requisitions (grouped by supplier).")
+    return redirect("requisition_list")
+
+
+@login_required
+@role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE], [ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE])
+@transaction.atomic
+def replenishment_policy_edit(request, product_id):
+    """Edit a product's replenishment settings (product-level default, or a
+    per-location override when ?location= is given)."""
+    from core.models import ReplenishmentPolicy
+    from core.forms import ReplenishmentPolicyForm
+    tenant = _get_default_tenant(request)
+    product = get_object_or_404(Product, id=product_id, tenant=tenant)
+    loc_id = request.GET.get("location") or request.POST.get("location_scope") or ""
+    location = Location.objects.filter(tenant=tenant, id=loc_id).first() if loc_id else None
+    policy = ReplenishmentPolicy.objects.filter(tenant=tenant, product=product, location=location).first()
+    if request.method == "POST":
+        form = ReplenishmentPolicyForm(request.POST, instance=policy)
+        if form.is_valid():
+            pol = form.save(commit=False)
+            pol.tenant = tenant
+            pol.product = product
+            pol.location = location
+            pol.save()
+            messages.success(request, f"Replenishment settings saved for {product.sku}"
+                                      + (f" at {location.name}." if location else " (default)."))
+            return redirect("replenishment_plan")
+    else:
+        form = ReplenishmentPolicyForm(instance=policy)
+    return render(request, "inventory/replenishment_policy_form.html", {
+        "tenant": tenant, "form": form, "product": product, "location": location})
+
+
 @login_required
 @role_required([ROLE_ADMIN, ROLE_PROCUREMENT, ROLE_WAREHOUSE, ROLE_READONLY])
 def stock_movements(request):

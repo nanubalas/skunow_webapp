@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Replenishment - SwifPro BI{% endblock %}
+{% block back_url %}{% url 'dashboard' %}{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-1">Replenishment</h2>
+    <div class="text-muted">Projected availability, urgency and suggested purchase / transfer quantities.</div>
+  </div>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2"><label class="form-label mb-1 small">Location</label>
+      <select name="location" class="form-select form-select-sm"><option value="">All</option>
+        {% for l in locations %}<option value="{{ l.id }}" {% if f_location == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label mb-1 small">Supplier</label>
+      <select name="supplier" class="form-select form-select-sm"><option value="">All</option>
+        {% for s in suppliers %}<option value="{{ s.id }}" {% if f_supplier == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label mb-1 small">Category</label>
+      <select name="category" class="form-select form-select-sm"><option value="">All</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if f_category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label mb-1 small">Status</label>
+      <select name="status" class="form-select form-select-sm"><option value="">All</option>
+        {% for v, lbl in status_choices %}<option value="{{ v }}" {% if f_status == v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}</select></div>
+    <div class="col-md-4 d-flex flex-wrap gap-3 align-items-center">
+      <div class="form-check"><input class="form-check-input" type="checkbox" name="below" value="1" id="fb" {% if f_below %}checked{% endif %}><label class="form-check-label small" for="fb">Below reorder</label></div>
+      <div class="form-check"><input class="form-check-input" type="checkbox" name="overstock" value="1" id="fo" {% if f_over %}checked{% endif %}><label class="form-check-label small" for="fo">Overstock</label></div>
+      <div class="form-check"><input class="form-check-input" type="checkbox" name="all" value="1" id="fa" {% if f_all %}checked{% endif %}><label class="form-check-label small" for="fa">Include inactive</label></div>
+      <button class="btn btn-primary btn-sm"><i class="bi bi-search"></i></button>
+      {% if filtered %}<a class="btn btn-outline-secondary btn-sm" href="{% url 'replenishment_plan' %}">Clear</a>{% endif %}
+    </div>
+  </form>
+</div></div>
+
+<form method="post" action="{% url 'replenishment_reorder' %}">
+  {% csrf_token %}
+  <div class="card"><div class="card-body">
+    <div class="d-flex justify-content-end mb-2">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-bag-plus"></i> Create requisitions for selected</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-light"><tr>
+          <th></th><th>SKU</th><th>Product</th><th>ABC</th><th>Location</th>
+          <th class="text-end">On hand</th><th class="text-end">Avail</th><th class="text-end">Resv</th>
+          <th class="text-end">Inbound PO</th><th class="text-end">In-transit</th><th class="text-end">Projected</th>
+          <th class="text-end">Safety</th><th class="text-end">ROP</th><th class="text-end">Max</th>
+          <th class="text-end">Suggest buy</th><th class="text-end">Suggest move</th>
+          <th>Supplier</th><th>Status</th><th class="text-end">Days</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{% if r.suggested_purchase_qty > 0 and not r.has_open_req %}<input class="form-check-input" type="checkbox" name="select" value="{{ r.token }}">{% endif %}</td>
+            <td class="fw-semibold">{{ r.product.sku }}</td>
+            <td class="small">{{ r.product.name }}</td>
+            <td><span class="badge text-bg-light">{{ r.abc }}</span></td>
+            <td class="small">{{ r.location.name }}</td>
+            <td class="text-end">{{ r.on_hand|floatformat:2 }}</td>
+            <td class="text-end">{{ r.available|floatformat:2 }}</td>
+            <td class="text-end text-muted">{{ r.reserved|floatformat:2 }}</td>
+            <td class="text-end text-muted">{{ r.inbound_po|floatformat:2 }}</td>
+            <td class="text-end text-muted">{{ r.in_transit|floatformat:2 }}</td>
+            <td class="text-end fw-semibold">{{ r.projected_available|floatformat:2 }}</td>
+            <td class="text-end text-muted">{{ r.safety_stock|floatformat:2 }}</td>
+            <td class="text-end text-muted">{{ r.reorder_point|floatformat:2 }}</td>
+            <td class="text-end text-muted">{{ r.max_stock|floatformat:2 }}</td>
+            <td class="text-end">
+              {% if r.suggested_purchase_qty > 0 %}
+                <input type="number" step="0.01" name="qty_{{ r.token }}" value="{{ r.suggested_purchase_qty|floatformat:2 }}"
+                       class="form-control form-control-sm text-end" style="width:90px;display:inline-block;">
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end small">
+              {% if r.suggested_transfer_qty > 0 %}<span class="text-info">{{ r.suggested_transfer_qty|floatformat:2 }}</span>
+                {% if r.transfer_from %}<div class="text-muted">from {{ r.transfer_from.name }}</div>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td class="small">{{ r.preferred_supplier.name|default:"—" }}{% if r.has_open_req %}<div class="text-warning small">open req exists</div>{% endif %}</td>
+            <td>
+              {% if r.status == "critical" %}<span class="badge text-bg-danger">Critical</span>
+              {% elif r.status == "below_safety" %}<span class="badge text-bg-danger">Below safety</span>
+              {% elif r.status == "below_reorder" %}<span class="badge text-bg-warning">Below reorder</span>
+              {% elif r.status == "overstock" %}<span class="badge text-bg-info">Overstock</span>
+              {% else %}<span class="badge text-bg-success">OK</span>{% endif %}
+            </td>
+            <td class="text-end small text-muted">{% if r.days_cover != None %}{{ r.days_cover }}{% else %}—{% endif %}</td>
+            <td class="text-end"><a class="small" href="{% url 'replenishment_policy_edit' r.product.id %}?location={{ r.location.id }}">Settings</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="20" class="text-center text-muted py-5">Nothing to plan. Set reorder points / min-max on products to populate this board.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-text mt-2">Projected available = on hand + inbound PO + in-transit − reserved. Suggested buy refills to max (or reorder qty), respecting MOQ and pack size. Lines with an open requisition can't be reselected.</div>
+  </div></div>
+</form>
+{% endblock %}

@@ -8071,3 +8071,176 @@ class RmaAccountingAndHoldTests(TestCase):
         other = Tenant.objects.create(name="Other Acct Co")
         self.assertEqual(available_serials(other), [])
         self.assertEqual(self._variance(), Decimal("0.00"))
+
+
+class ReplenishmentTests(TestCase):
+    """Replenishment planning: projected availability, suggestions (MOQ/pack/max),
+    status, ABC, transfer suggestion, and requisition creation."""
+
+    def setUp(self):
+        from core.models import OrgMembership, Supplier
+        self.t = Tenant.objects.create(name="Replen Co")
+        self.loc = Location.objects.create(tenant=self.t, name="WH")
+        self.loc2 = Location.objects.create(tenant=self.t, name="WH2")
+        self.sup = Supplier.objects.create(tenant=self.t, name="Acme Supply")
+        self.p = Product.objects.create(tenant=self.t, sku="P1", name="Widget",
+                                        average_cost=Decimal("10.0000"))
+        self.user = User.objects.create_user("repl", password="pw")
+        OrgMembership.objects.create(user=self.user, tenant=self.t, role="ADMIN", is_default=True)
+
+    def _bal(self, on_hand, reserved="0", product=None, location=None):
+        from core.models import InventoryBalance
+        return InventoryBalance.objects.create(
+            tenant=self.t, product=product or self.p, location=location or self.loc,
+            on_hand=Decimal(on_hand), reserved=Decimal(reserved))
+
+    def _policy(self, product=None, location=None, **kw):
+        from core.models import ReplenishmentPolicy
+        return ReplenishmentPolicy.objects.create(
+            tenant=self.t, product=product or self.p, location=location, **kw)
+
+    def _row(self, product=None, location=None, **plankw):
+        from core.services import replenishment as rsvc
+        product = product or self.p
+        location = location or self.loc
+        for r in rsvc.plan(self.t, **plankw):
+            if r["product"].id == product.id and r["location"].id == location.id:
+                return r
+        return None
+
+    # ---- formula / suggestions ----
+    def test_below_reorder_suggests_purchase_refill_to_max(self):
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        r = self._row()
+        self.assertEqual(r["status"], "below_reorder")
+        self.assertEqual(r["projected_available"], Decimal("5.00"))
+        self.assertEqual(r["suggested_purchase_qty"], Decimal("45.00"))   # 50 - 5
+
+    def test_projected_includes_inbound_po(self):
+        from core.models import PurchaseOrder, PurchaseOrderLine
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        po = PurchaseOrder.objects.create(tenant=self.t, po_number="PO1", supplier=self.sup,
+                                          receiving_location=self.loc, status=PurchaseOrder.Status.APPROVED)
+        PurchaseOrderLine.objects.create(po=po, product=self.p, ordered_qty=Decimal("20"),
+                                         unit_cost=Decimal("10"))
+        r = self._row()
+        self.assertEqual(r["inbound_po"], Decimal("20"))
+        self.assertEqual(r["projected_available"], Decimal("25.00"))       # 5 + 20
+        self.assertEqual(r["status"], "okay")                              # covered
+
+    def test_projected_includes_in_transit(self):
+        from core.models import InventoryTransfer, InventoryTransferLine
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        tr = InventoryTransfer.objects.create(tenant=self.t, transfer_number="TR1",
+                                              from_location=self.loc2, to_location=self.loc,
+                                              status=InventoryTransfer.Status.DISPATCHED)
+        InventoryTransferLine.objects.create(transfer=tr, product=self.p, qty=Decimal("15"),
+                                             dispatched_qty=Decimal("15"), received_qty=Decimal("0"))
+        r = self._row()
+        self.assertEqual(r["in_transit"], Decimal("15"))
+        self.assertEqual(r["projected_available"], Decimal("20.00"))       # 5 + 15
+
+    def test_reserved_reduces_projected(self):
+        self._bal("20", reserved="8")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        r = self._row()
+        self.assertEqual(r["projected_available"], Decimal("12.00"))       # 20 - 8
+
+    def test_moq_respected(self):
+        self._bal("0")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"), moq=Decimal("100"))
+        r = self._row()
+        self.assertEqual(r["suggested_purchase_qty"], Decimal("100.00"))   # need 50, MOQ 100
+
+    def test_pack_size_rounding(self):
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"), pack_size=Decimal("12"))
+        r = self._row()
+        self.assertEqual(r["suggested_purchase_qty"], Decimal("48.00"))    # 45 -> 4 packs of 12
+
+    def test_overstock_status(self):
+        self._bal("80")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        r = self._row()
+        self.assertEqual(r["status"], "overstock")
+        self.assertEqual(r["suggested_purchase_qty"], Decimal("0.00"))
+
+    def test_preferred_supplier_from_policy(self):
+        from core.models import Supplier
+        other_sup = Supplier.objects.create(tenant=self.t, name="Override Supply")
+        self.p.preferred_supplier = self.sup
+        self.p.save()
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"), preferred_supplier=other_sup)
+        r = self._row()
+        self.assertEqual(r["preferred_supplier"].id, other_sup.id)
+
+    def test_transfer_suggestion_from_excess_location(self):
+        self._bal("5", location=self.loc)
+        self._bal("100", location=self.loc2)
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))  # product-level
+        r = self._row(location=self.loc)
+        self.assertGreater(r["suggested_transfer_qty"], Decimal("0"))
+        self.assertEqual(r["transfer_from"].id, self.loc2.id)
+
+    # ---- ABC ----
+    def test_abc_classification(self):
+        from core.services.replenishment import abc_classes
+        pa = Product.objects.create(tenant=self.t, sku="A1", name="A", average_cost=Decimal("10"))
+        pb = Product.objects.create(tenant=self.t, sku="B1", name="B", average_cost=Decimal("1"))
+        pc = Product.objects.create(tenant=self.t, sku="C1", name="C", average_cost=Decimal("1"))
+        self._bal("8", product=pa)    # value 80
+        self._bal("15", product=pb)   # value 15
+        self._bal("5", product=pc)    # value 5
+        cls = abc_classes(self.t)
+        self.assertEqual(cls[pa.id], "A")
+        self.assertEqual(cls[pb.id], "B")
+        self.assertEqual(cls[pc.id], "C")
+
+    # ---- requisition integration ----
+    def test_requisition_created_from_suggestion(self):
+        from core.models import PurchaseRequisition, PurchaseRequisitionLine
+        self.p.preferred_supplier = self.sup
+        self.p.save()
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        self.client.login(username="repl", password="pw")
+        token = f"{self.p.id}:{self.loc.id}"
+        resp = self.client.post("/inventory/replenishment/reorder/",
+                                {"select": [token], f"qty_{token}": "45"})
+        self.assertEqual(resp.status_code, 302)
+        req = PurchaseRequisition.objects.get(tenant=self.t)
+        self.assertEqual(req.preferred_supplier_id, self.sup.id)
+        line = req.lines.get(product=self.p)
+        self.assertEqual(line.quantity, Decimal("45"))
+
+    def test_duplicate_open_requisition_skipped(self):
+        from core.models import PurchaseRequisition, PurchaseRequisitionLine
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        existing = PurchaseRequisition.objects.create(
+            tenant=self.t, req_number="PR-OLD", status=PurchaseRequisition.Status.DRAFT,
+            requested_by=self.user)
+        PurchaseRequisitionLine.objects.create(requisition=existing, product=self.p, quantity=Decimal("10"))
+        self.client.login(username="repl", password="pw")
+        token = f"{self.p.id}:{self.loc.id}"
+        self.client.post("/inventory/replenishment/reorder/", {"select": [token], f"qty_{token}": "45"})
+        # No new requisition created for the already-open product.
+        self.assertEqual(PurchaseRequisition.objects.filter(tenant=self.t).count(), 1)
+
+    # ---- isolation / nav ----
+    def test_tenant_isolation(self):
+        from core.services import replenishment as rsvc
+        self._bal("5")
+        self._policy(reorder_point=Decimal("10"), max_stock=Decimal("50"))
+        other = Tenant.objects.create(name="Other Replen Co")
+        self.assertEqual(rsvc.plan(other), [])
+
+    def test_search_finds_replenishment(self):
+        from core.roles import search_nav, ADMIN
+        for q in ("reorder planning", "purchase suggestions", "safety stock", "abc analysis"):
+            urls = [r["url"] for r in search_nav(ADMIN, q, limit=None)]
+            self.assertIn("/inventory/replenishment/", urls, f"{q!r} did not find replenishment")
