@@ -11,7 +11,7 @@ from core.models import (
     Product, Supplier, Location, Site, Bin, Department, OrgMembership, ChannelConnection,
     SalesOrder, SalesOrderLine, Tenant,
     UnitOfMeasure, UOMConversion, BillOfMaterials, BillOfMaterialsLine, ProductBarcode, ProductCategory,
-    StockAdjustment, StockTakeSession, StockTakeLine,
+    StockAdjustment, StockTakeSession, StockTakeLine, ReplenishmentPolicy,
     InventoryTransfer, InventoryTransferLine,
     GoodsReceipt, GoodsReceiptLine, LandedCostCharge,
     SupplierInvoice, SupplierInvoiceLine,
@@ -209,6 +209,20 @@ class StockAdjustmentForm(TenantModelForm):
                 and qty is not None and qty != 0 and not (cleaned.get("serial_number") or "").strip():
             self.add_error("serial_number", f"{product.sku} is serial-tracked — enter the serial number being adjusted.")
         return cleaned
+
+
+class ReplenishmentPolicyForm(TenantModelForm):
+    class Meta:
+        model = ReplenishmentPolicy
+        fields = ["min_stock", "max_stock", "safety_stock", "reorder_point", "reorder_quantity",
+                  "eoq", "lead_time_days", "preferred_supplier", "moq", "pack_size", "is_active"]
+        help_texts = {
+            "reorder_point": "Reorder when projected available falls below this.",
+            "max_stock": "Suggested orders refill projected available up to this level.",
+            "moq": "Supplier minimum order quantity (orders are bumped up to this).",
+            "pack_size": "Order multiple — suggested quantity rounds up to this (0 = none).",
+            "eoq": "Economic order quantity (informational; not auto-calculated).",
+        }
 
 
 class ProductCategoryForm(TenantModelForm):

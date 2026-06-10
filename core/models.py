@@ -605,6 +605,40 @@ class ProductBarcode(models.Model):
         return self.code
 
 
+class ReplenishmentPolicy(models.Model):
+    """Min/max planning settings for a product, optionally overridden per location.
+
+    A row with location=NULL is the product-level default; a row with a location
+    is that location's override (whole-row override — the resolver prefers it).
+    These feed the replenishment planning service; they do NOT touch the
+    inventory ledger, costing, or GL. Product.reorder_level / preferred_supplier
+    remain the fallback when no policy exists."""
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="replenishment_policies")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="replenishment_policies")
+    location = models.ForeignKey(Location, on_delete=models.CASCADE, null=True, blank=True,
+                                 related_name="replenishment_policies")
+    min_stock = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    max_stock = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    safety_stock = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    reorder_point = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    reorder_quantity = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # Economic order quantity — a stored input (not auto-calculated here).
+    eoq = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    lead_time_days = models.PositiveSmallIntegerField(default=0)
+    preferred_supplier = models.ForeignKey("Supplier", on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name="replenishment_policies")
+    moq = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))  # supplier min order qty
+    pack_size = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))  # order multiple (0 = none)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("tenant", "product", "location")
+
+    def __str__(self):
+        scope = self.location.name if self.location_id else "default"
+        return f"Replenishment {self.product.sku} ({scope})"
+
+
 class BillOfMaterials(models.Model):
     """BOM / Kit definition for an assembled/bundled SKU."""
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)

@@ -119,6 +119,7 @@ NAV = [
         ("Stock Movements", "/inventory/movements/", "list-columns-reverse", {ADMIN, MANAGER, WAREHOUSE, PURCHASING}),
         ("Serial Availability", "/inventory/serials/", "upc-scan", {ADMIN, MANAGER, WAREHOUSE, PURCHASING, SALES}),
         ("Low Stock", "/inventory/low-stock/", "exclamation-triangle", {ADMIN, MANAGER, WAREHOUSE, PURCHASING}),
+        ("Replenishment", "/inventory/replenishment/", "graph-up-arrow", {ADMIN, MANAGER, WAREHOUSE, PURCHASING}),
         ("Transfers", "/transfers/", "arrow-left-right", {ADMIN, MANAGER, WAREHOUSE}),
         ("Cycle Counts", "/cycle-counts/", "clipboard-check", {ADMIN, MANAGER, WAREHOUSE}),
         ("Stock Takes", "/stock-takes/", "ui-checks-grid", {ADMIN, MANAGER, WAREHOUSE, FINANCE}),
@@ -218,7 +219,8 @@ NAV_META = {
     "/inventory/adjustments/": {"desc": "Manual stock corrections, damage and write-offs.", "keywords": ["adjustment", "write-off", "writeoff", "damage", "correction"]},
     "/inventory/movements/": {"desc": "Append-only stock movement ledger.", "keywords": ["movement", "ledger", "transactions", "history"]},
     "/inventory/serials/": {"desc": "Available serial-tracked units, with cost and source.", "keywords": ["serial", "serial availability", "serial stock", "serial history", "serial number"]},
-    "/inventory/low-stock/": {"desc": "Items below their reorder point.", "keywords": ["low stock", "reorder", "replenishment", "shortage"]},
+    "/inventory/low-stock/": {"desc": "Items below their reorder point.", "keywords": ["low stock", "reorder", "shortage"]},
+    "/inventory/replenishment/": {"desc": "Reorder planning: projected availability, suggestions and ABC.", "keywords": ["replenishment", "reorder planning", "purchase suggestions", "min max stock", "safety stock", "eoq", "abc analysis", "reorder point"]},
     "/transfers/": {"desc": "Move stock between locations (incl. in-transit).", "keywords": ["transfer", "in-transit", "in transit", "move stock"]},
     "/cycle-counts/": {"desc": "Targeted spot stock counts.", "keywords": ["cycle count", "spot count"]},
     "/stock-takes/": {"desc": "Full physical count of a location or whole site.", "keywords": ["stock take", "stocktake", "physical count", "stock-take"]},
@@ -315,7 +317,12 @@ def search_nav(role, query, limit=12):
         section_l = e["section"].lower()
         desc_l = (e["description"] or "").lower()
         label_words = label_l.replace("/", " ").replace("&", " ").split()
-        kw = set(e["keywords"])
+        # Match whole keyword phrases AND their individual words, so a multi-word
+        # alias like "purchase suggestions" is found by either token.
+        kw = set()
+        for k in e["keywords"]:
+            kw.add(k)
+            kw.update(k.split())
         blob = label_l + " " + section_l + " " + desc_l
         total, ok = 0, True
         for tok in tokens:
