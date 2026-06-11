@@ -7224,6 +7224,18 @@ class DashboardGroupingTests(TestCase):
         bins = next(c for c in resp.context["cards"] if c["url"] == "/bins/")
         self.assertEqual(bins["badge"], "Advisory")
 
+    def test_no_raw_template_comments_leak(self):
+        # Django {# #} comments are single-line only; a multi-line one leaks as
+        # literal text. Guard both the dashboard and a module page against it.
+        self.client.login(username="dash_admin", password="pw")
+        dash = self.client.get("/dashboard/admin")
+        mod = self.client.get("/dashboard/modules/inventory/")
+        for resp in (dash, mod):
+            self.assertNotContains(resp, "{#")
+            self.assertNotContains(resp, "#}")
+            self.assertNotContains(resp, "One launcher card")
+            self.assertNotContains(resp, "Shared launcher-card styling")
+
     # ---- hamburger menu still grouped/collapsible (unchanged) ----
     def test_hamburger_grouping_intact(self):
         self.client.login(username="dash_admin", password="pw")
