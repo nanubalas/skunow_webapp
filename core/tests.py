@@ -7099,8 +7099,9 @@ class DashboardGroupingTests(TestCase):
         self.assertContains(resp, "dash-mod")
         for title in ["Sales", "Procurement", "Inventory", "Finance", "Reports", "Administration"]:
             self.assertContains(resp, title)
-        # A section description from the centralised metadata is shown.
-        self.assertContains(resp, "transfers, counts and replenishment")
+        # Section descriptions are intentionally not shown on the dashboard.
+        self.assertNotContains(resp, "transfers, counts and replenishment")
+        self.assertNotContains(resp, "Quotes, orders, customers")
 
     def test_dashboard_shows_preview_only_with_view_all_link(self):
         self.client.login(username="dash_admin", password="pw")
@@ -7113,10 +7114,12 @@ class DashboardGroupingTests(TestCase):
         self.assertGreater(inv["extra"], 0)
         self.assertEqual(inv["extra"], inv["count"] - 4)
         self.assertEqual(inv["view_all_url"], "/dashboard/modules/inventory/")
-        # A real link (not an inline expander) with the module-named copy + count.
+        # A real link (not an inline expander). The visible text is just
+        # "View all" - no module name, no "+N" count badge.
         self.assertContains(resp, 'href="/dashboard/modules/inventory/"')
-        self.assertContains(resp, "View all Inventory")
-        self.assertContains(resp, "+%d" % inv["extra"])
+        self.assertContains(resp, ">View all</span>")
+        self.assertNotContains(resp, "dva-count")
+        self.assertNotContains(resp, "+%d" % inv["extra"])
 
     def test_dashboard_no_inline_expansion_of_hidden_cards(self):
         # The old inline progressive-disclosure markup/JS is gone: no hidden tail
@@ -7142,7 +7145,7 @@ class DashboardGroupingTests(TestCase):
         self.assertTrue(small, "expected at least one small group to exercise this")
         for g in small:
             self.assertEqual(g["extra"], 0)
-            self.assertNotContains(resp, 'aria-label="View all %d %s items"' % (g["count"], g["title"]))
+            self.assertNotContains(resp, 'aria-label="View all %s"' % g["title"])
 
     # ---- dedicated module pages ----
     def test_module_page_renders_all_cards(self):
